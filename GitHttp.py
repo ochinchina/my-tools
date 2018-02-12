@@ -14,7 +14,14 @@ import argparse
 class GitHttp:
     def __init__( self, directory ):
         self.directory = os.path.abspath( directory )
+        if not os.path.exists( self.directory ):
+            os.makedirs(self.directory)
         os.chdir( self.directory )
+        if not self.__is_git():
+            print subprocess.check_output( ['git', 'init'] )
+        subprocess.check_output( ['git', 'config', '--global', 'user.email', 'test@example.com'])
+        subprocess.check_output( ['git', 'config', '--global', 'user.name', 'test'] )
+
 
     def list( self):
         if 'dir' in request.args:
@@ -48,8 +55,39 @@ class GitHttp:
                 result.append( {"file":f[len(self.directory):]})
         return json.dumps( result )
 
+    def status( self ):
+        """
+        get status of the git repository
+
+        Returns:
+            the output of command "git status"
+        """
+        return subprocess.check_output( ['git', 'status'])
+
+    def add( self ):
+        """
+        add a file to the git repository
+
+        Args:
+            Parameters from client:
+            - file the file to be added
+        Returns:
+            the output of command "git add <filename>"
+        """
+        if 'file' in request.args:
+            return subprocess.check_output( ["git", "add", request.args['file'] ] )
+        else:
+            return "missing parameter file"
 
     def save( self):
+        """
+        save a file to the git server
+
+        Args:
+            Parameters from client:
+            - file the file name
+
+        """
         if 'file' not in request.args:
             return "no file name provided", 400
 
@@ -69,6 +107,35 @@ class GitHttp:
             return "save file successfully"
         except Exception as ex:
             return "Fail to save file", 500
+
+    def delete( self ):
+        """
+        delete a file from the git repository
+
+        Args:
+            Parameters from the client:
+            - file the file name
+        """
+        try:
+            filename = os.path.abspath( "%s/%s" % (self.directory, request.args['file'] ) )
+            filename = filename[len( self.directory)+1:]
+            if not os.path.exists( filename ):
+                return "Not found", 404
+            if self.__is_file_in_repository( filename ):
+                logging.info( "try to remove file %s in git repository" % filename )
+                return subprocess.check_output( ['git', 'rm', filename] )
+            elif os.path.isdir( filename ):
+                logging.info( "try to remove directory %s" % filename )
+                os.removedirs( filename )
+                return "Success to remove file %s" % filename
+            else:
+                logging.info( "try to remove file %s" % filename )
+                os.remove( filename )
+                return "Success to remove file %s" % filename
+        except Exception as ex:
+            print ex
+            return ex, 500
+
 
     def download( self):
         if 'file' not in request.args:
@@ -203,12 +270,17 @@ class GitHttp:
     def __is_git( self ):
         return os.path.exists( os.path.abspath( "%s/%s" % ( self.directory, ".git" ) ) )
 
+    def __is_file_in_repository( self, filename ):
+        """
+        check if the file is in the git repository or not
+        """
+        return len( subprocess.check_output( ['git', 'log', filename] ) ) > 0
+
     def __is_branch_exist( self, branch_name ):
         """
         check if a branch exists or not
         """
         branches = subprocess.check_output( ['git', 'branch', '--no-color'] )
-        print branches
         for branch in branches.split('\n'):
             words = branch.split()
             if len( words ) == 1:
@@ -243,6 +315,9 @@ def main():
     app = Flask(__name__)
     app.add_url_rule( "/list", "list", git_http.list, methods=['GET'])
     app.add_url_rule( "/save", "save", git_http.save, methods = ['POST', 'PUT'])
+    app.add_url_rule( "/add", "add", git_http.add, methods = ['POST', 'PUT'])
+    app.add_url_rule( "/delete", "delete", git_http.delete, methods=["PUT"] )
+    app.add_url_rule( "/status", "status", git_http.status, methods=["GET"] )
     app.add_url_rule( "/download", "download", git_http.download, methods =  ['GET'] )
     app.add_url_rule( "/make_branch", "make_branch", git_http.make_branch, methods = ['PUT'] )
     app.add_url_rule( "/commit", "commit", git_http.commit, methods=["PUT"] )
@@ -251,7 +326,7 @@ def main():
     app.add_url_rule( "/list_tag", "list_tag", git_http.list_tag, methods=["GET"] )
     app.add_url_rule( "/list_branch", "list_branch", git_http.list_branch, methods=["GET"] )
     app.add_url_rule( "/log", "log", git_http.log, methods=["GET"] )
-    app.run( host = args.host, port = args.port )
+    app.run( host = args.host, port = int(args.port) )
 
 if __name__ == "__main__":
     main()
