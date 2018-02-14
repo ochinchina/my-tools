@@ -5,6 +5,7 @@ import jinja2
 import json
 import argparse
 import os
+import requests
 import tempfile
 import yaml
 
@@ -21,7 +22,27 @@ class NameItem:
     def is_array( self ):
         return self.index >= 0
 
-                
+def is_json_file( filename ):
+    return filename.endswith( ".json" ) or filename.endswith( ".js" )
+
+def load_value_file( value_file ):
+    """
+    load value file from remote web server or local file system
+    """
+    if value_file.startswith( "http://" ) or value_file.startswith( "https://" ):
+        r = requests.get( value_file )                
+        if r.status_code / 100 == 2:
+            if is_json_file( value_file ):
+                return json.loads( r.content )
+            else:
+                return yaml.safe_load( r.content )
+    else:
+        with open( value_file ) as fp:
+            if is_json_file( value_file ):
+                return json.load(fp)
+            else:
+                return yaml.safe_load( fp )
+
 def load_value_files( value_files ):
     """
     load the .json or .yaml configuration file. if same item in multiple
@@ -35,14 +56,8 @@ def load_value_files( value_files ):
     """
     result = {}
     for value_file in value_files:
-        try:
-            with open( value_file ) as fp:
-                if value_file.endswith( ".json" ) or value_file.endswith( ".js" ):
-                    result.update( json.load(fp) )
-                else:
-                    result.update( yaml.safe_load( fp ) )
-        except:
-            pass
+        print load_value_file( value_file )
+        result.update( load_value_file( value_file ) )
     return result
 
 def parse_values( values ):
@@ -86,6 +101,14 @@ def parse_values( values ):
                        cur_result[ item.name ] = v
     return result
 
+def load_template( templateEnv, template_path ):
+    if template_path.startswith( "http://" ) or template_path.startswith( "https://" ):
+        r = requests.get( template_path )
+        if r.status_code / 100 == 2:
+            return templateEnv.from_string( r.content )
+    else:
+        return templateEnv.get_template( os.path.abspath( template_path ) ) 
+
 def change_deployment( args, action ):
     """
     change the kubernetes deployment
@@ -97,9 +120,9 @@ def change_deployment( args, action ):
         if --dry-run flag is in the command line, only print the changed template
         otherwise it will call kubectl command to create/delete deployments
     """
-    templateLoader = jinja2.FileSystemLoader( searchpath = args.searchpath )
+    templateLoader = jinja2.FileSystemLoader( searchpath = "/" )
     templateEnv = jinja2.Environment( loader=templateLoader )
-    template = templateEnv.get_template( args.template )
+    template = load_template( templateEnv, args.template )
     config = {}
     if args.value_files:
         config.update( load_value_files( args.value_files) )
@@ -119,7 +142,6 @@ def change_deployment( args, action ):
 
 def parse_args():
     parser = argparse.ArgumentParser( description = "generate template" )
-    parser.add_argument( "--searchpath", help = "the search path of kubernetes .yaml file, default is current directory", required = False, default = "./" )
     parser.add_argument( "--template", help = "the kubernetes .yaml template file", required = True )
     parser.add_argument( "--value-files", help = "the configuration files", nargs = "*", required = False )
     parser.add_argument( "--dry-run", help = "run without real action", action = "store_true" )
@@ -133,10 +155,9 @@ def parse_args():
 
 def main():
     args = parse_args()
-    print args
-    print args.template
     args.func( args )
 
-main()
+if __name__ == "__main__":
+    main()
 
 
