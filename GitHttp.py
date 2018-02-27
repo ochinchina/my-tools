@@ -102,7 +102,7 @@ class GitHttp:
                 shutil.copyfileobj( request.stream, fp )
 
             if self.__is_git():
-                subprocess.check_output( ['git', 'add', request.args['file'] ] )
+                subprocess.check_output( ['git', 'add', filename ] )
 
             return "save file successfully"
         except Exception as ex:
