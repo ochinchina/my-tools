@@ -102,10 +102,22 @@ def parse_values( values ):
     return result
 
 def load_template( templateEnv, template_path ):
+    """
+    load a template from file, http server, s3 storage
+    """
     if template_path.startswith( "http://" ) or template_path.startswith( "https://" ):
         r = requests.get( template_path )
         if r.status_code / 100 == 2:
             return templateEnv.from_string( r.content )
+    elif template_path.startswith( "s3://"):
+        f, temp_file = tempfile.mkstemp()
+        os.close( f )
+        os.system( "s3cmd get -f %s %s" % (template_path, temp_file ) ) 
+        content = ""
+        with open( temp_file ) as fp:
+            content = templateEnv.from_string( fp.read() )
+        os.remove( temp_file )
+        return content 
     else:
         return templateEnv.get_template( os.path.abspath( template_path ) ) 
 
