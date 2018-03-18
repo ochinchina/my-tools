@@ -1,5 +1,6 @@
 #!/usr/bin/python
 
+import argparse
 from flask import Flask,request,send_file
 import json
 import os
@@ -12,6 +13,25 @@ import sys
 
 class Application:
     def __init__(self, app_conf ):
+        """
+        configuration example for application:
+
+        {
+            "command": "/bin/sleep",
+            "args": [ "60" ],
+            "auto-start": true,
+            "env": {
+                "env-var-1": "value1",
+                "env-var-2", "value2"
+            },
+            "conf-root": "/root",
+            "stop-command": "/bin/pkill",
+            "stop-args": ["sleep"]
+        }
+
+        only the command parameter is mandatory and all other parameters
+        are optional
+        """
         command = app_conf['command']
         args = app_conf['args'] if 'args' in app_conf else None
         self.args = [ command ] + args if args is not None else []
@@ -39,13 +59,17 @@ class Application:
         if self.is_running():
             return "running"
         else: return "stopped"
-    def poll( self ):
-        return self.process.poll() if self.process else None
 
     def is_running( self ):
+        """
+        check if the process is running or not
+        """
         return self.process and self.process.poll() == None
 
     def stop( self ):
+        """
+        stop the running application
+        """
         if self.is_running():
             # send stop command
             if self.stop_command:
@@ -57,12 +81,18 @@ class Application:
         return not self.is_running()
 
     def restart( self ):
+        """
+        restart the application
+        """
         if self.is_running():
             self.stop()
             self.process.wait()
         return self.start()
 
     def is_autostart( self ):
+        """
+        if the application is auto started application
+        """
         return self.auto_start
 
     def save_conf( self, conf_file_path, contentobj ):
@@ -94,6 +124,9 @@ class Application:
         return os.path.join( self.conf_root, conf_file_path )
 
     def list_conf( self ):
+        """
+        list all the configuration file
+        """
         result = []
         os.path.walk( self.conf_root, lambda arg, dirname, names: result.extend( [ os.path.join( dirname, name ) for name in names if os.path.isfile( os.path.join( dirname, name ) ) ] ), None )
         return [ file_path[len( self.conf_root ):] for file_path in result ]
@@ -101,8 +134,8 @@ class Application:
 class AppMan:
     def __init__( self, app_configs ):
         self.apps = {}
-        for conf in app_configs:
-            self.apps[conf['name'] ] = Application( conf )
+        for name, conf in app_configs.iteritems():
+            self.apps[name ] = Application( conf )
         self.start_autostart_app()
 
     def start_autostart_app( self ):
@@ -208,8 +241,29 @@ class AppMan:
         return json.dumps( app.list_conf() )
 
 
+def load_args():
+    parser = argparse.ArgumentParser( description = "Application Manager with Restful interface" )
+    parser.add_argument( "--conf-file", help = "application configuration file", required = True )
+    parser.add_argument( "--log-file", help = "the log file", required = False )
+    parser.add_argument( "--host", help = "the host/ip address to listen", required = False, default="127.0.0.1" )
+    parser.add_argument( "--port", help = "the listening port", required = False, default = "5000" )
+    parser.add_argument( "--log-level", help = "the log level: CRITICAL,ERROR,WARNING,INFO,DEBUG", required = False, default="DEBUG" )
+    return parser.parse_args()
+
+def load_config_file( conf_file ):
+    with open( conf_file ) as fp:
+        return json.load( fp )
+    return {}
+
+def init_logger( args ):
+    if args.log_file:
+        import logging
+        logging.basicConfig(filename=args.log_file,level=logging.DEBUG)
+
 def main():
-    app_man =  AppMan( [{'name':'app1', 'command': '/bin/sleep', 'args': ['100'], 'auto-start': True } ] )
+    args = load_args()
+    init_logger( args ) 
+    app_man =  AppMan( load_config_file( args.conf_file ) )
     app = Flask(__name__)
     app.add_url_rule( "/list", "list_app", app_man.list_app, methods = ['GET'] )
     app.add_url_rule( "/status/<name>", "app_status", app_man.app_status, methods = ['GET'] )
@@ -220,7 +274,7 @@ def main():
     app.add_url_rule( "/delete/conf/<name>/<path:path>", "delete_conf", app_man.delete_conf, methods=["PUT", "POST"] )
     app.add_url_rule( "/download/conf/<name>/<path:path>", "download_conf", app_man.download_conf, methods = ['GET'] )
     app.add_url_rule( "/list/conf/<name>", "list_conf", app_man.list_conf, methods = ['GET'] )
-    app.run()
+    app.run( host = args.host, port = int(args.port) )
 
 if __name__ == "__main__":
     main()
