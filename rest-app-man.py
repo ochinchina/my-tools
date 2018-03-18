@@ -95,9 +95,9 @@ class Application:
         """
         return self.auto_start
 
-    def save_conf( self, conf_file_path, contentobj ):
+    def upload_conf( self, conf_file_path, contentobj ):
         """
-        save a configure file
+        upload a configure file
         """
         file_path = os.path.join( self.conf_root, conf_file_path )
         # create dir if not exist
@@ -201,12 +201,12 @@ class AppMan:
         else:
             return "no such application %s" % name
 
-    def save_conf( self, name, path ):
+    def upload_conf( self, name, path ):
         app = self.apps[name] if name in self.apps else None
         if app is None:
             return "no such application %s" % name
 
-        if app.save_conf(path, request.stream ):
+        if app.upload_conf(path, request.stream ):
             return "succeed to save config file %s" % path
         else: return "fail to save config file %s" % path
 
@@ -265,12 +265,12 @@ def main():
     init_logger( args ) 
     app_man =  AppMan( load_config_file( args.conf_file ) )
     app = Flask(__name__)
-    app.add_url_rule( "/list", "list_app", app_man.list_app, methods = ['GET'] )
-    app.add_url_rule( "/status/<name>", "app_status", app_man.app_status, methods = ['GET'] )
-    app.add_url_rule( "/start/<name>", "start_app", app_man.start_app, methods=['PUT', 'POST'])
-    app.add_url_rule( "/stop/<name>", "stop_app", app_man.stop_app, methods=['PUT', 'POST'])
-    app.add_url_rule( "/restart/<name>", "restart_app", app_man.restart_app, methods=["PUT", "POST"] )
-    app.add_url_rule( "/save/conf/<name>/<path:path>", "save_conf", app_man.save_conf, methods=["POST"])
+    app.add_url_rule( "/list/app", "list_app", app_man.list_app, methods = ['GET'] )
+    app.add_url_rule( "/status/app/<name>", "app_status", app_man.app_status, methods = ['GET'] )
+    app.add_url_rule( "/start/app/<name>", "start_app", app_man.start_app, methods=['PUT', 'POST'])
+    app.add_url_rule( "/stop/app/<name>", "stop_app", app_man.stop_app, methods=['PUT', 'POST'])
+    app.add_url_rule( "/restart/app/<name>", "restart_app", app_man.restart_app, methods=["PUT", "POST"] )
+    app.add_url_rule( "/upload/conf/<name>/<path:path>", "upload_conf", app_man.upload_conf, methods=["POST"])
     app.add_url_rule( "/delete/conf/<name>/<path:path>", "delete_conf", app_man.delete_conf, methods=["PUT", "POST"] )
     app.add_url_rule( "/download/conf/<name>/<path:path>", "download_conf", app_man.download_conf, methods = ['GET'] )
     app.add_url_rule( "/list/conf/<name>", "list_conf", app_man.list_conf, methods = ['GET'] )
