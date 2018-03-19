@@ -54,6 +54,9 @@ class Application:
             "conf-root": "/root",
             "stop-command": "/bin/pkill",
             "stop-args": ["sleep"]
+            "dir": "change to directory before starting the application"
+            "stdout-file": "the file for saving the stdout of application"
+            "stderr-file": "the file for saving the stderr of application"
         }
 
         only the command parameter is mandatory and all other parameters
@@ -66,6 +69,10 @@ class Application:
         self.auto_start = app_conf['auto-start'] if 'auto-start' in app_conf else False
         self.conf_root = os.path.abspath( app_config['conf-root'] ) if 'conf-root' in app_conf else os.path.abspath( '.' )
         self.stop_command = app_conf['stop-command'] if 'stop-command' in app_conf else None
+        self.dir = app_conf['dir'] if 'dir' in app_conf else None
+        self.stdout_file = app_conf['stdout-file'] if 'stdout-file' in app_conf else None
+        self.stderr_file = app_conf['stderr-file'] if 'stderr-file' in app_conf else None
+
         if self.stop_command and 'stop-args' in app_conf:
             self.stop_command.extend( app_conf['stop-args'] )
         self.process = None
@@ -76,8 +83,18 @@ class Application:
             return False
 
         #start the process if it is not started
-        self.process = subprocess.Popen( self.args, env = self.env, stdout = sys.stdout, stderr = sys.stderr )
+        stdout = self.__create_output_file( self.stdout_file, sys.stdout )
+        stderr = self.__create_output_file( self.stderr_file, sys.stderr )
+        self.process = subprocess.Popen( self.args, bufsize = 0, env = self.env, stdout = stdout, stderr = stderr, cwd = self.dir, universal_newlines = True )
         return self.is_running()
+
+    def __create_output_file( self, filename, default_output ):
+        if filename:
+            try:
+                return open( filename, "w" )
+            except:
+                pass
+        return default_output
 
     def status( self ):
         """
