@@ -11,6 +11,33 @@ import sys
 """
 """
 
+class ContentRange:
+    def __init__( self, firstBytePos, lastBytePos, totalLength = None ):
+        self.firstBytePos = firstBytePos
+        self.lastBytePos = lastBytePos
+        self.totalLength = totalLength
+
+    @classmethod
+    def parse( clss, s ):
+        """
+        parse the content of 'Content-Range'. The 'Content-Range' is defined in RFC7233
+        its format is:
+
+        Content-Range: bytes first-byte-pos-last-byte-pos/completeLength or *
+        """
+        words = s.split()
+        if len( words ) == 2 and words[0] == 'bytes':
+            words = words[1].split('/')
+            if len( words ) == 2:
+                totalLength = int( words[1] ) if words[1].isdigit() else -1
+                words = words[0].split('-')
+                if len( words ) == 2:
+                    return ContentRange( int( words[0] ), int( words[1] ), totalLength )
+        else: return None
+
+    def __str__( self ):
+        return "%d-%d/%s" % (self.firstBytePos, self.lastBytePos, "*" if self.totalLength < 0 else str( self.totalLength ) )
+
 class Application:
     def __init__(self, app_conf ):
         """
@@ -95,7 +122,7 @@ class Application:
         """
         return self.auto_start
 
-    def upload_conf( self, conf_file_path, contentobj ):
+    def upload_conf( self, conf_file_path, contentobj, contentRange ):
         """
         upload a configure file
         """
@@ -104,7 +131,12 @@ class Application:
         if not os.path.exists( os.path.dirname( file_path ) ):
             os.makedirs( os.path.dirname( file_path ) )
 
-        with open( file_path, "wb" ) as fp:
+        if contentRange.firstBytePos == 0:
+            mode = "wb"
+        else: mode = "rb+"
+        with open( file_path, mode ) as fp:
+            if contentRange:
+                fp.seek( contentRange.firstBytePos )
             shutil.copyfileobj( request.stream, fp )
             return True
         return False
@@ -202,11 +234,20 @@ class AppMan:
             return "no such application %s" % name
 
     def upload_conf( self, name, path ):
+        """
+        upload the configuration file
+
+        Args:
+            name - the application name
+            path - the file to save
+        """
         app = self.apps[name] if name in self.apps else None
         if app is None:
             return "no such application %s" % name
 
-        if app.upload_conf(path, request.stream ):
+        contentRange = ContentRange.parse( request.headers['Content-Range'] ) if 'Content-Range' in request.headers else None
+            
+        if app.upload_conf(path, request.stream, contentRange ):
             return "succeed to save config file %s" % path
         else: return "fail to save config file %s" % path
 

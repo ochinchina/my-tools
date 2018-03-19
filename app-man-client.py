@@ -3,6 +3,7 @@
 import argparse
 import urllib2
 import json
+import os
 
 class AppManClient:
     def __init__( self, app_man_url ):
@@ -70,10 +71,26 @@ class AppManClient:
             srfile - the local file to be loaded
             destfile - the remote file should be uploaded
         """
+        if not os.path.exists( srcfile ):
+            return "local file %s does not exist" % srcfile
+        if not os.path.isfile( srcfile ):
+            return "local file %s is not a regular file" % srcfile
+
+        offset = 0
         with open( srcfile ) as fp:
-            data = fp.read()
-            f = urllib2.urlopen( '%s/upload/conf/%s/%s' % ( self.app_man_url, app_name, destfile ), data = data )
-            return f.read()
+            while True:
+                data = fp.read( 1024 * 1024)
+                data_len = len( data )
+                if data_len <= 0: return "succeed to save file"
+
+                req = urllib2.Request( '%s/upload/conf/%s/%s' % (self.app_man_url, app_name, destfile) )
+                req.add_header( 'Content-Type','application/octet-stream')
+                req.add_header( 'Content-length', data_len )
+                req.add_header( 'Content-Range', 'bytes %d-%d/*' % ( offset, offset + data_len - 1 ) )
+                req.add_data( data )
+                offset = offset + data_len
+                req.get_method = lambda: 'POST'
+                urllib2.urlopen( req )
 
         return "fail to open local file %s" % srcfile
 
