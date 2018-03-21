@@ -67,7 +67,7 @@ class Application:
         self.args = [ command ] + args if args is not None else []
         self.env = app_conf['env'] if 'env' in app_conf else os.environ
         self.auto_start = app_conf['auto-start'] if 'auto-start' in app_conf else False
-        self.conf_root = os.path.abspath( app_config['conf-root'] ) if 'conf-root' in app_conf else os.path.abspath( '.' )
+        self.conf_root = os.path.abspath( app_conf['conf-root'] ) if 'conf-root' in app_conf else os.path.abspath( '.' )
         self.stop_command = app_conf['stop-command'] if 'stop-command' in app_conf else None
         self.dir = app_conf['dir'] if 'dir' in app_conf else None
         self.stdout_file = app_conf['stdout-file'] if 'stdout-file' in app_conf else None
