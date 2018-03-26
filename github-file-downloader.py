@@ -82,6 +82,9 @@ class GithubFileDownlder:
         else:
             return ""
         """
+        if self.is_raw_file( url ):
+            return url
+
         r = [ p for p in self.get_url_path( url ).split( "/" ) if len( p ) > 0 ]
         if r[2] == 'blob':
             r.pop( 2 )
@@ -115,6 +118,10 @@ class GithubFileDownlder:
         path = [ p for p in path.split('/') if len( p ) > 0 ]
         return len( path ) > 0 and path[2] == 'tree'
 
+    def is_raw_file( self, url ):
+        r = urlparse( url )
+        return r.hostname == "raw.githubusercontent.com"
+
     def download( self ):
         """
         download all the files under url passed in the __init__ method
@@ -123,8 +130,9 @@ class GithubFileDownlder:
 
         while len( urls ) > 0:
             url = urls.pop()
-            print url
-            if self.is_folder( url ):
+            if self.is_raw_file( url ):
+                self.download_raw_file( url )
+            elif self.is_folder( url ):
                 for f in self.parse_folder( url ):
                     if f.startswith( "https://" ) or f.startswith( "http://" ):
                         urls.append( f )
