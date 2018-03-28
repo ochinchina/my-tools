@@ -7,9 +7,9 @@ import tempfile
 
 def save_images( args ):
     for image in args.images:
-        save_image( image, args.dest )
+        save_image( image, args.dest, args.public )
 
-def save_image( image, dest ):
+def save_image( image, dest, public ):
     base_image_name = image.split( '/' )[-1]
     tmp = base_image_name.split(':' )
     if dest.startswith( 's3://'):
@@ -26,7 +26,7 @@ def save_image( image, dest ):
     os.system( "gzip %s" % filename )
     filename = "%s.gz" % filename
     if dest.startswith( 's3://' ):
-        command = "s3cmd put %s %s" % (filename, dest )
+        command = "s3cmd put %s %s %s" % (filename, "-P" if public else "", dest )
         print command
         os.system( command )
         os.remove( filename )
@@ -119,6 +119,7 @@ def parse_args():
     parser = argparse.ArgumentParser( description = "docker tools")
     subparsers = parser.add_subparsers( help = "docker tools" )
     save_parser = subparsers.add_parser( "save", help = "save the image")
+    save_parser.add_argument( "-P", "--public", help = "share the image", action = "store_true" )
     save_parser.add_argument( "images", nargs='+', help = "the image with version" )
     save_parser.add_argument( "dest", default = ".", help = "the destination to save the image")
     save_parser.set_defaults( func = save_images )
