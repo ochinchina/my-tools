@@ -5,8 +5,77 @@ import os
 import subprocess
 import tempfile
 
+
+def parse_build_between( build_between_info ):
+    """
+    parse the build between in format "[start_time-]end_time", the start_time and end_time is in
+    format "d+[s|m|M|w|h|d|y]"
+    """
+    def to_seconds( build_time_info ):
+        """
+        convert the build time into a seconds
+
+        Args:
+            build_time_info - the build time in format "d+[s|m|M|w|h|d|y]", d stands for digital, s - seconds,
+            m - minutes, M - months, w - weeks, h - hours, d - days, y - years
+        Returns:
+            the build time in seconds
+        """
+        time_units = {'s': 1, 'm': 60, 'M': 31*24*3600, 'h': 3600, 'w':7*24*3600,'d': 24*3600, 'y': 365*24*3600}
+        return int(build_time_info) if build_time_info.isdigit() else (int(build_time_info[0:-1]) * time_units[ build_time_info[-1] ] )
+
+    #if no start time
+    pos = build_between_info.find( '-' )
+    if pos == -1:
+        return (-1, to_seconds( build_between_info ) )
+    else:
+        start_time = to_seconds( build_between_info[0:pos] ) if len( build_between_info[0:pos] )  > 0 else -1
+        end_time = to_seconds( build_between_info[pos+1:] ) if len( build_between_info[pos+1:] ) > 0 else -1
+        return (start_time, end_time )
+
+def is_build_between( build_time, build_between):
+    """
+    check if the image is build between
+    """
+    if build_between[0] <= 0:
+        return True if build_between[1] <= 0 else build_time <= build_between[1]
+    else:
+        if build_time < build_between[0]:
+            return False
+
+        return True if build_between[1] <= 0 else build_time <= build_between[1]
+
+def get_images_build_between( build_between_info ):
+    """
+    get all images build matches build_between_info
+
+    Args:
+        build_between_info - the image build between information in format "start-end"
+    Returns:
+        all the images whose build time matches the build_between_info
+    """
+    out = subprocess.check_output( ['docker', 'images'] )
+    time_units = {'seconds': 1, 'minutes': 60, 'hours': 3600, 'days': 24 * 3600, 'years': 365*24*3600, 'weeks': 7 * 24 * 3600, 'months': 31*24*3600 }
+    build_between= parse_build_between( build_between_info )
+    result = []
+    for lineno, line in enumerate(out.split("\n")):
+        if lineno == 0: continue
+        words = line.split()
+        if len( words ) > 5 and words[3].isdigit() and words[4] in time_units:
+            build_time = time_units[ words[4] ] * int( words[3] )
+            if is_build_between( build_time, build_between):
+                result.append( words[0] + ":" + words[1] )
+    return result
+
 def save_images( args ):
-    for image in args.images:
+    if args.images:
+        images = args.images
+    elif args.build_between:
+        images = get_images_build_between( args.build_between)
+    else:
+        images = []
+
+    for image in images:
         save_image( image, args.dest, args.public )
 
 def save_image( image, dest, public ):
@@ -120,7 +189,8 @@ def parse_args():
     subparsers = parser.add_subparsers( help = "docker tools" )
     save_parser = subparsers.add_parser( "save", help = "save the image")
     save_parser.add_argument( "-P", "--public", help = "share the image", action = "store_true" )
-    save_parser.add_argument( "images", nargs='+', help = "the image with version" )
+    save_parser.add_argument( "--build-between", help = 'the image build between time in format "[start-]end" , the "start" and "end" is in format "d+[s|m|h|d|w|M|y" (s:seonds,m:minutes,h:hours,d:days,M:months,y:years), example: 10m(build less than 10 minutes), 10m-20m(build between 10 minutes to 20 minutes), 10m- (build greater than 10 minutes)', required = False )
+    save_parser.add_argument( "--images", nargs='*', help = "the image with version", required = False )
     save_parser.add_argument( "dest", default = ".", help = "the destination to save the image")
     save_parser.set_defaults( func = save_images )
     load_parser = subparsers.add_parser( "load", help = "load the image")
