@@ -142,6 +142,12 @@ def find_image_id( image ):
     return None
 
 def remove_image( image ):
+    """
+    remove the docker image
+
+    Args:
+        image - the docker image with version
+    """
     containers = find_container_with_image( image )
     for container in containers:
         if container['status'] == 'exited':
@@ -149,6 +155,12 @@ def remove_image( image ):
     os.system( 'docker rmi %s' % image )
 
 def load_image( src, force ):
+    """
+    load docker image
+
+    Args:
+        src - the docker image source, the source can be: local file, s3 file
+    """
     if src.startswith( 's3://' ):
         dest_dir = os.path.abspath( tempfile.mkdtemp() )
         os.system( "s3cmd get %s %s" % ( src, dest_dir ) )
@@ -184,19 +196,34 @@ def parse_image_load_result( result ):
                 image = line[pos+len( "Loaded image:"):].strip()
     return { 'layers': layers, 'image': image }
 
+def remove_images( args ):
+    if args.images:
+        images = args.images
+    elif args.build_between:
+        images = get_images_build_between( args.build_between)
+    else:
+        images = []
+    for image in images:
+        remove_image( image )
+
 def parse_args():
     parser = argparse.ArgumentParser( description = "docker tools")
     subparsers = parser.add_subparsers( help = "docker tools" )
-    save_parser = subparsers.add_parser( "save", help = "save the image")
+    save_parser = subparsers.add_parser( "save", help = "save save images")
     save_parser.add_argument( "-P", "--public", help = "share the image", action = "store_true" )
     save_parser.add_argument( "--build-between", help = 'the image build between time in format "[start-]end" , the "start" and "end" is in format "d+[s|m|h|d|w|M|y" (s:seonds,m:minutes,h:hours,d:days,M:months,y:years), example: 10m(build less than 10 minutes), 10m-20m(build between 10 minutes to 20 minutes), 10m- (build greater than 10 minutes)', required = False )
     save_parser.add_argument( "--images", nargs='*', help = "the image with version", required = False )
-    save_parser.add_argument( "dest", default = ".", help = "the destination to save the image")
+    save_parser.add_argument( "dest", default = ".", help = "the destination to save the image, the destination can be a directory, s3 storage")
     save_parser.set_defaults( func = save_images )
-    load_parser = subparsers.add_parser( "load", help = "load the image")
+    load_parser = subparsers.add_parser( "load", help = "load docker images")
     load_parser.add_argument( "src", nargs='+', help = "load docker image" )
     load_parser.add_argument( "--force", action="store_true", help="force to load the image")
     load_parser.set_defaults( func = load_images )
+    rmi_parser = subparsers.add_parser( "rmi", help = "remove docker images")
+    rmi_parser.add_argument( "--build-between", help = 'the image build between time in format "[start-]end" , the "start" and "end" is in format "d+[s|m|h|d|w|M|y" (s:seonds,m:minutes,h:hours,d:days,M:months,y:years), example: 10m(build less than 10 minutes), 10m-20m(build between 10 minutes to 20 minutes), 10m- (build greater than 10 minutes)', required = False )
+    rmi_parser.add_argument( "--images", nargs='*', help = "docker image with version", required = False )
+    rmi_parser.set_defaults( func = remove_images )
+
     return parser.parse_args()
 
 
