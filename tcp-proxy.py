@@ -16,9 +16,12 @@ class TcpProxy:
         return s
 
     def do_proxy( self, conn ):
-        remote_proxy_conn = self.connect_remote_proxy()
-        thread.start_new_thread( self.do_forward, (conn, remote_proxy_conn ) )
-        thread.start_new_thread( self.do_forward, (remote_proxy_conn, conn ) )
+        try:
+            remote_proxy_conn = self.connect_remote_proxy()
+            thread.start_new_thread( self.do_forward, (conn, remote_proxy_conn ) )
+            thread.start_new_thread( self.do_forward, (remote_proxy_conn, conn ) )
+        except Exception as ex:
+            print ex
 
     def do_forward(self, recv_conn, forward_conn):
         try:
@@ -39,8 +42,6 @@ class TcpProxy:
             while True:
                 conn, remote_addr = s.accept()
                 self.do_proxy( conn )
-        except KeyboardInterrupt:
-            s.close()
         except Exception as ex:
             print ex
 
@@ -61,7 +62,6 @@ def main():
     args = parse_args()
     proxy_addr = parse_ip_address( args.proxy )
     listen_addr = parse_ip_address( args.listen )
-    print listen_addr
     proxy = TcpProxy( proxy_addr[0], proxy_addr[1] )
     proxy.create_listener( listen_addr[0], listen_addr[1] )
 
