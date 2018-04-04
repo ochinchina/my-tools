@@ -39,6 +39,8 @@ class TcpProxy:
             while True:
                 conn, remote_addr = s.accept()
                 self.do_proxy( conn )
+        except KeyboardInterrupt:
+            s.close()
         except Exception as ex:
             print ex
 
