@@ -12,12 +12,12 @@ import logging
 import argparse
 
 class GitHttp:
-    def __init__( self, directory ):
+    def __init__( self, directory, git ):
         self.directory = os.path.abspath( directory )
         if not os.path.exists( self.directory ):
             os.makedirs(self.directory)
         os.chdir( self.directory )
-        if not self.__is_git():
+        if git and not self.__is_git():
             print subprocess.check_output( ['git', 'init'] )
         subprocess.check_output( ['git', 'config', '--global', 'user.email', 'test@example.com'])
         subprocess.check_output( ['git', 'config', '--global', 'user.name', 'test'] )
@@ -79,9 +79,9 @@ class GitHttp:
         else:
             return "missing parameter file"
 
-    def save( self):
+    def upload( self):
         """
-        save a file to the git server
+        upload a file to the git server
 
         Args:
             Parameters from client:
@@ -297,7 +297,8 @@ class GitHttp:
 
 def parse_args():
     parser = argparse.ArgumentParser( description = "Git repository Http interface" )
-    parser.add_argument( "--git-dir", help = "git directory", required = True )
+    parser.add_argument( "--dir", help = "directory", required = True )
+    parser.add_argument( "--without-git", help = "git flag", action = "store_true", default = False )
     parser.add_argument( "--host", help = "the host/ip to listen", required = False, default = "127.0.0.1" )
     parser.add_argument( "--port", help = "the port to listen", required = False, default = "5000" )
     parser.add_argument( "--logfile", help = "the name of log file", required = False )
@@ -308,13 +309,14 @@ def init_logger( logfile, loglevel ):
     logging.basicConfig(filename=logfile,level=loglevel)
 def main():
     args = parse_args()
+    print args
     if "logfile" in args:
         init_logger( args.logfile, args.loglevel )
-    git_http = GitHttp( args.git_dir )
+    git_http = GitHttp( args.dir, not args.without_git )
 
     app = Flask(__name__)
     app.add_url_rule( "/list", "list", git_http.list, methods=['GET'])
-    app.add_url_rule( "/save", "save", git_http.save, methods = ['POST', 'PUT'])
+    app.add_url_rule( "/upload", "upload", git_http.upload, methods = ['POST', 'PUT'])
     app.add_url_rule( "/add", "add", git_http.add, methods = ['POST', 'PUT'])
     app.add_url_rule( "/delete", "delete", git_http.delete, methods=["PUT"] )
     app.add_url_rule( "/status", "status", git_http.status, methods=["GET"] )
