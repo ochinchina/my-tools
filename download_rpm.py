@@ -76,6 +76,7 @@ class RpmRepository:
             versions = []
             for version in self._packages[pkg]:
                 versions.append( version )
+            versions.sort()
             print "%s:%s" % (pkg, ",".join(versions) )
 
     def download_version( self, package, version = None ):
@@ -101,24 +102,27 @@ class RpmRepository:
 def list_packages( args, repo ):
     repo.list_packages()
 
-def download_package( args, repo ):
-    repo.download_version( args.package, args.version )
+def download_packages( args, repo ):
+    for pkg in args.packages:
+        index = pkg.rfind( ":" )
+        pkg_name = pkg if index <= 0 else pkg[0:index]
+        pkg_version = None if index <= 0 else pkg[ index + 1:]
+        repo.download_version( pkg_name, pkg_version )
 
 def parseArgs( repo ):
     parser = argparse.ArgumentParser( description="rpm tool")
     subparsers = parser.add_subparsers(help="rpm tool")
-    parser.add_argument( "--baseurl", required = True, help="the RPM repository base url")
+    parser.add_argument( "--base-url", required = True, help="the RPM repository base url")
     list_package_parser = subparsers.add_parser( "list")
     list_package_parser.set_defaults( func = functools.partial( list_packages, repo = repo ) )
     download_package_parser = subparsers.add_parser( "download" )
-    download_package_parser.add_argument( "--package", required = True, help = "the package name" )
-    download_package_parser.add_argument( "--version", required = False, help = "the package version to download, last version if it is missed")
-    download_package_parser.set_defaults( func = functools.partial( download_package, repo = repo ) )
+    download_package_parser.add_argument( "packages", help = "the package name with version in format: pkgname:version", nargs = "+" )
+    download_package_parser.set_defaults( func = functools.partial( download_packages, repo = repo ) )
     return parser.parse_args()
 def main():
     repo = RpmRepository()
     args = parseArgs( repo )
-    repo.set_baseurl( args.baseurl )
+    repo.set_baseurl( args.base_url )
     args.func( args )
 
 if __name__ == "__main__":
