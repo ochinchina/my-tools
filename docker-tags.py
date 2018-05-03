@@ -7,9 +7,16 @@ import sys
 def get_tags( image):
     tmp = image.split("/")
     if len( tmp ) == 3:
-        f = urllib2.urlopen("https://%s/v2/%s/tags/list" % (tmp[0], tmp[1] + "/" + tmp[2] ) )
+        f = urllib2.urlopen("https://%s/v2/%s/tags/list" % (tmp[0], "/".join( tmp[1:] ) ) )
     else:
-        f = urllib2.urlopen("https://registry.hub.docker.com/v1/repositories/%s/tags" % image )
+        fetch = False
+        try:
+            f = urllib2.urlopen("https://registry.hub.docker.com/v1/repositories/%s/tags" % image )
+            fetch = True
+        except Exception as ex:
+            pass
+        if not fetch:
+            f = urllib2.urlopen("https://%s/v2/%s/tags/list" % (tmp[0], "/".join( tmp[1:] ) ) )
     try:
         jsonData = json.loads( f.read() )
         if type(jsonData) is list:
