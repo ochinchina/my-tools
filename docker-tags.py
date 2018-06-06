@@ -19,12 +19,15 @@ def get_tags( image):
             f = urllib2.urlopen("https://%s/v2/%s/tags/list" % (tmp[0], "/".join( tmp[1:] ) ) )
     try:
         jsonData = json.loads( f.read() )
+        tags = []
         if type(jsonData) is list:
             for data in jsonData:
-                print data["name"]
+                tags.append( data["name"] )
         elif "tags" in jsonData:
             for data in jsonData["tags"]:
-                print data
+                tags.append( data )
+        tags = sorted( tags )
+        print "\n".join( tags )
     except:
         print "not find %s" % image
 
