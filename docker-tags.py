@@ -16,6 +16,7 @@ def get_tags( image):
         except Exception as ex:
             pass
         if not fetch:
+            print "https://%s/v2/%s/tags/list" % (tmp[0], "/".join( tmp[1:] ) )
             f = urllib2.urlopen("https://%s/v2/%s/tags/list" % (tmp[0], "/".join( tmp[1:] ) ) )
     try:
         jsonData = json.loads( f.read() )
@@ -33,3 +34,4 @@ def get_tags( image):
 
 if __name__ == "__main__":
     get_tags( sys.argv[1] )
+
