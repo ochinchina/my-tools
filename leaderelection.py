@@ -17,14 +17,15 @@ end
 """
 
 
-LEADER_RELEASE_SCRIPT = """
-if redis.call( "get", KEYS[1]) == ARGV[1] then
+LEADER_RELEASE_SCRIPT = """if redis.call( "get", KEYS[1]) == ARGV[1] then
     redis.call("del", KEYS[1] )
     return 1
 else
     return 0
 end
 """
+
+LEADER_GET_SCRIPT = """return redis.call( "get", KEYS[1])"""
 class LeaderElection:
     def __init__( self, redis_urls, resource, ttl = None, id = None ):
         """
@@ -54,19 +55,44 @@ class LeaderElection:
         for url in urls:
             try:
                 leader = self._from_url( url ).eval( LEADER_ELECTION_SCRIPT, 1, self.resource, self.id, self.ttl )
+                if leader is None: continue
                 if leader in elections:
                     elections[ leader ] += 1
                 else:
                     elections[ leader ] = 1
-            except:
-                pass
+            except Exception as ex:
+                print ex
 
         #find the leader if its vote pass half of redis instances
         for leader in elections:
             if elections[leader] > len( urls ) / 2:
                 return leader
 
-        raise Exception( "fail to get a leader")
+        raise Exception( "fail to elect a leader")
+
+    def get_leader( self ):
+        """
+        get the leader
+        """
+        urls = self._get_urls()
+        elections = {}
+        for url in urls:
+            try:
+                leader = self._from_url( url ).eval( LEADER_GET_SCRIPT, 1, self.resource )
+                if leader is None: continue
+                if leader in elections:
+                    elections[ leader ] += 1
+                else:
+                    elections[ leader ] = 1
+            except Exception as ex:
+                print ex
+
+        for leader in elections:
+            if elections[leader] > len( urls ) / 2:
+                return leader
+
+        raise Exception( "fail to get leader")
+
 
     def release_leader( self):
         """

@@ -9,7 +9,7 @@ app = Flask( __name__ )
 
 redis_urls = None
 
-@app.route("/leader/<resource>/<node>/<int:ttl>")
+@app.route("/leader/elect/<resource>/<node>/<int:ttl>")
 def elect_leader( resource, node, ttl ):
     """
     elect the leader on resource with the node and ttl information
@@ -27,6 +27,18 @@ def elect_leader( resource, node, ttl ):
         print ex
         return json.dumps( {"error": "fail to elect leader" } ), 501
 
+@app.route( "/leader/get/<resource>")
+def get_leader( resource ):
+    """
+    get the leader
+    """
+    leader_election = create_leader_election( redis_urls, resource, "ignore", 10 )
+    try:
+        leader = leader_election.get_leader()
+        return json.dumps( {"leader": leader} ), 200
+    except Exception as ex:
+        print ex
+        return json.dumps( {"error": "fail to get leader" } ), 501
 
 def create_leader_election( redis_urls, resource, node, ttl ):
     """
