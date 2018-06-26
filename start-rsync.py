@@ -135,6 +135,8 @@ def parse_args():
     server_parser = subparsers.add_parser( "start-server", help = "start rsync server" )
     server_parser.add_argument( "--config", help = "the rsyncd configuration file", required = True )
     server_parser.add_argument( "--bwlimit", help = "bandwidth limit in bytes, default is 4M", required = False, type = int, default = 4194304 )
+    server_parser.add_argument( "--log-file", help = "the log file", required = False )
+    server_parser.add_argument( "--log-level", help = "the log level", default = "INFO", choices=["CRITICAL","FATAL","ERROR","WARN","INFO","DEBUG"])
     server_parser.set_defaults( func = start_rsync_server )
     client_parser = subparsers.add_parser( "start-client", help = "start the rsync client" )
     client_parser.add_argument( "--config", help = "rsync client config", required = True )
