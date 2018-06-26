@@ -46,18 +46,13 @@ def start_rsync_client( args ):
     """
     config = load_client_config( args.config )
 
-    # elect leader periodically in background
-    leader_elect_thread = threading.Thread( target = do_leader_elect, args = (args,) )
-    leader_elect_thread.setDaemon( True )
-    leader_elect_thread.start()
-
     my_node_id = get_my_node( args )
     old_master_node = my_node_id
 
     while True:
         try:
             logger.debug( "try to get master node")
-            master_node = get_master_node( args.leader_elect_url, args.leader_elect_resource, my_node_id, args.leader_elect_ttl )
+            master_node = get_master_node( args.leader_elect_url, args.leader_elect_resource )
             master_changed = old_master_node != master_node
             old_master_node = master_node
             logger.debug( "master node is %s" % master_node )
@@ -87,19 +82,6 @@ def start_rsync_client( args ):
         except KeyboardInterrupt as ex:
             break
 
-def do_leader_elect( args ):
-    """
-    perodically elect leader
-    """
-    my_node_id = get_my_node( args )
-    
-    while True:
-        try:
-            get_master_node( args.leader_elect_url, args.leader_elect_resource, my_node_id, args.leader_elect_ttl )
-        except:
-            pass
-        time.sleep( args.leader_elect_ttl * 1.0 / 3.0 )
-
 def do_rsync( master_node, srcs, dests ):
     """
     sync file from master node to this node
@@ -123,7 +105,7 @@ def get_master_node( leader_election_url, resource, my_node_id, ttl ):
     """
     get the master node
     """
-    r = urllib2.urlopen( url = "%s/%s/%s/%d" % ( leader_election_url, resource, my_node_id, ttl * 1000 ) )
+    r = urllib2.urlopen( url = "%s/%s" % ( leader_election_url, resource ) )
 
     if r.getcode() / 100 == 2:
         result = json.loads( r.read() )
@@ -159,7 +141,6 @@ def parse_args():
     client_parser.add_argument( "--sync-interval", help = "rsync interval in seconds, default is 300 seconds", required = False, type = int, default = 300 )
     client_parser.add_argument( "--leader-elect-url", help = "leader election url", required = True )
     client_parser.add_argument( "--leader-elect-resource", help = "the leader election resource", required = True )
-    client_parser.add_argument( "--leader-elect-ttl", help = "leader election ttl in seconds, default is 10 second", required = False, default = 10, type=int)
     client_parser.add_argument( "--node-id", help = "the node id for test only, don't set it in product env", required = False )
     client_parser.add_argument( "--log-file", help = "the log file", required = False )
     client_parser.add_argument( "--log-level", help = "the log level", default = "INFO", choices=["CRITICAL","FATAL","ERROR","WARN","INFO","DEBUG"])
