@@ -36,7 +36,8 @@ def start_rsync_client( args ):
             [
               { 
                "srcs": [ "/folder1", "/folder2"],
-               "dests": ["/dest1", "/dest2", "/dest3"]
+               "dests": ["/dest1", "/dest2", "/dest3"],
+               "delete": "one of: before, during, delay, after, excluded"
               },
               {
               "srcs": [ "/folder3", "/folder4"],
@@ -58,7 +59,7 @@ def start_rsync_client( args ):
             logger.debug( "master node is %s" % master_node )
 
             if master_changed:
-                logger.info( "master node is changed")
+                logger.info( "master node is changed to %s" % master_node )
                 time.sleep( args.sync_interval )
                 continue
             #if I'm the master node, don't do the rsync
@@ -70,7 +71,8 @@ def start_rsync_client( args ):
             #start rsync from the master node
             for item in config:
                 if "srcs" in item and "dests" in item:
-                    do_rsync( master_node, item["srcs"], item["dests"] )
+                    delete = item['delete'] if 'delete' in item else None
+                    do_rsync( master_node, item["srcs"], item["dests"], delete = delete )
         except Exception as ex:
             logger.error( "Fail to sync from remote node:%s" % ex )
         except KeyboardInterrupt as ex:
@@ -82,7 +84,7 @@ def start_rsync_client( args ):
         except KeyboardInterrupt as ex:
             break
 
-def do_rsync( master_node, srcs, dests ):
+def do_rsync( master_node, srcs, dests, delete = None ):
     """
     sync file from master node to this node
 
@@ -91,15 +93,15 @@ def do_rsync( master_node, srcs, dests ):
         srcs - folders/files in the master node
         dests - the destination folders in this node
     """
+    delete_flag = "" if delete is None else ("--delete-%s" % delete)
     for dest in dests:
-        command = "rsync -r rsync://%s%s %s" % ( master_node, srcs[0] if len( srcs ) == 1 else "{%s}" % ",".join(srcs), dest )
+        command = "rsync -r %s rsync://%s%s %s" % ( delete_flag, master_node, srcs[0] if len( srcs ) == 1 else "{%s}" % ",".join(srcs), dest )
         try:
-            print command
+            logger.info( "execute command:%s" % command )
             if os.system( command ) == 0:
-                print "succeed to do rsync"
+                logger.info( "succeed to do rsync" )
         except Exception as ex:
-            print ex
-            print "fail to execute command:", command
+            logger.error( "fail to execute command, %s" % str( ex ) ) 
 
 def get_master_node( leader_election_url, resource, my_node_id, ttl ):
     """
