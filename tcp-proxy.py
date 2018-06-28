@@ -7,9 +7,10 @@ import thread
 import argparse
 
 class TcpProxy:
-    def __init__( self, proxy_host, proxy_port ):
+    def __init__( self, proxy_host, proxy_port, debug ):
         self.proxy_host = proxy_host
         self.proxy_port = proxy_port
+        self.debug = debug
     def connect_remote_proxy( self ):
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.connect(( self.proxy_host, self.proxy_port))
@@ -29,6 +30,7 @@ class TcpProxy:
                 data = recv_conn.recv(2048)
                 if data:
                     forward_conn.sendall(data )
+                    if self.debug: sys.stdout.write( data )
                 else:
                     break
         except:
@@ -44,11 +46,16 @@ class TcpProxy:
                 self.do_proxy( conn )
         except Exception as ex:
             print ex
+        try:
+            s.close()
+        except:
+            pass
 
 def parse_args():
     parser = argparse.ArgumentParser( description = "TCP proxy" )
     parser.add_argument( "--listen", help = "the listen address in IP:PORT format", required = True )
     parser.add_argument( "--proxy", help = "the proxy address in IP:PORT format", required = True )
+    parser.add_argument( "--debug", "-d", action = "store_true", help = "in debug mode", required = False )
     return parser.parse_args()
      
 #while True:
@@ -62,7 +69,7 @@ def main():
     args = parse_args()
     proxy_addr = parse_ip_address( args.proxy )
     listen_addr = parse_ip_address( args.listen )
-    proxy = TcpProxy( proxy_addr[0], proxy_addr[1] )
+    proxy = TcpProxy( proxy_addr[0], proxy_addr[1], debug = args.debug )
     proxy.create_listener( listen_addr[0], listen_addr[1] )
 
 if __name__== "__main__":
