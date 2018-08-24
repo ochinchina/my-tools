@@ -1,7 +1,31 @@
 #!/usr/bin/python
 
 import re
+import subprocess
 import sys
+
+def get_terminal_max_lines():
+    try:
+        return int( subprocess.check_output( ['tput', 'lines'] ).strip() )
+    except:
+        pass
+
+    try:
+        return int( subprocess.check_output( ['stty', 'size'] ).split()[0] )
+    except:
+        pass
+
+    try:
+        out = subprocess.check_output( ['stty', '-a' ] )
+        for line in out.split( "\n" ):
+            fields = line.split( ";" )
+            for field in fields:
+                words = field.split()
+                if len( words ) == 2 and words[0] == 'rows': return int( words[1] )
+    except:
+        pass
+
+    return 50
 
 def green():
     sys.stdout.write( '\033[0;32m' )
@@ -64,6 +88,32 @@ def color_play_recap( line ):
         sys.stdout.write( line[index:end] )
         white()
         sys.stdout.write( line[ end + 1:] )
+
+
+class LineReader:
+    def __init__( self, filename ):
+        self.filename = filename
+        self.fobj = None
+
+    def __enter__( self ):
+        if self.filename == None:
+            return sys.stdin
+        else:
+            self.fobj = open( self.filename )
+            return self.fobj
+
+    def __exit__( self, *args ):
+        if self.fobj is not None:
+            self.fobj.close()
+
+def read_line( filename, line_proc_func ):
+    if filename is not None:
+        with open( filename ) as fp:
+            for line in fp:
+                line_proc_func( line )
+    else:
+        for line in sys.stdin:
+            line_proc_func( line )
         
 def color_output_file( filename ):
     line_colors = {
@@ -82,8 +132,13 @@ def color_output_file( filename ):
                    r"\d+ plays": green
                   }
     playRecap = False
-    with open( filename ) as fp:
+    lines = 0
+    max_lines_in_terminal = get_terminal_max_lines()
+    with LineReader( filename ) as fp:
        for line in fp:
+           lines += 1
+           if lines % max_lines_in_terminal == 0:
+               if filename is not None: raw_input()
            color_found = False
            for k, v in line_colors.iteritems():
                if re.match( k, line ):
@@ -98,4 +153,4 @@ def color_output_file( filename ):
     normal() 
 
 if __name__ == "__main__":
-    color_output_file( sys.argv[1] )
+    color_output_file( sys.argv[1] if len( sys.argv ) > 1 else None )
