@@ -31,7 +31,7 @@ def green():
     sys.stdout.write( '\033[0;32m' )
 
 def grey():
-    sys.stdout.write( '\033[0;37m' )
+    sys.stdout.write( '\033[1;30m' )
 
 def normal():
     sys.stdout.write( '\033[0m' )
@@ -75,7 +75,7 @@ def color_play_recap( line ):
         yellow()
         sys.stdout.write( line[0:index] )
         index += 1
-        white()
+        normal()
         sys.stdout.write( ':' )
         end = find_non_space( line, index )
         end = find_space( line, end )
@@ -86,7 +86,7 @@ def color_play_recap( line ):
         end = find_space( line, end )
         yellow()
         sys.stdout.write( line[index:end] )
-        white()
+        normal()
         sys.stdout.write( line[ end + 1:] )
 
 
@@ -119,10 +119,10 @@ def color_output_file( filename ):
     line_colors = {
                    r"changed:": yellow,
                    r"ok": green,
-                   r"TASK": white,
-                   r"PLAY": white,
+                   r"TASK": normal,
+                   r"PLAY": normal,
                    r"ansible-playbook \d": blue,
-                   r"ansible-playbook": white,
+                   r"ansible-playbook": normal,
                    r"<": blue,
                    r"META:": blue,
                    r"fatal:": red,
@@ -153,4 +153,7 @@ def color_output_file( filename ):
     normal() 
 
 if __name__ == "__main__":
-    color_output_file( sys.argv[1] if len( sys.argv ) > 1 else None )
+    try:
+        color_output_file( sys.argv[1] if len( sys.argv ) > 1 else None )
+    except:
+        normal()
