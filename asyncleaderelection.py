@@ -73,7 +73,7 @@ class LeaderElection:
         elections = {}
         for r in self.redises:
             try:
-                leader = await r.evalsha( LEADER_GET_SCRIPT, keys = [self.resource] )
+                leader = await r.eval( LEADER_GET_SCRIPT, keys = [self.resource] )
                 if leader is None: continue
                 if leader in elections:
                     elections[ leader ] += 1
