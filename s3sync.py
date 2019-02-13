@@ -13,7 +13,6 @@ def list_s3_path( s3cfg, path ):
     command = ['s3cmd', '-c', s3cfg, 'ls' ]
     if path is not None: command.append( path )
     out = subprocess.check_output( command )
-    print( command )
     result = []
     for line in out.split('\n'):
         fields = line.split()
@@ -64,15 +63,15 @@ def s3_bucket_exist( s3cfg, bucket ):
         print(ex)
         return False
 
-def get_dest_s3file( src_dir, src_file, dest_dir ):
-    if src_file.startswith( src_file ):
+def get_dest_s3file( src_dir, src_file, dest_file ):
+    if src_file.startswith( src_dir ):
         if src_dir == src_file:
-            return s3_path_join( s3_dirname( src_file ), s3_basename( src_file ) )
+            return s3_path_join( dest_file , s3_basename( src_file ) ) if dest_file.endswith( '/' ) else dest_file
         if not src_dir.endswith( '/' ) and src_file[len(src_dir)] != '/':
             return ""
         else:
             filename = src_file[ len( src_dir ):] if src_dir.endswith( '/' ) else src_file[ len( src_dir ) + 1:]
-            return s3_path_join( dest_dir, filename )
+            return s3_path_join( s3_dirname( dest_file ), filename )
     else:
         return ""
 
@@ -91,43 +90,63 @@ def rm_tempdir( temp_dir ):
             os.remove( f )
     os.rmdir( temp_dir )
 
-def copy_s3_file( src_s3cfg, src_file, dest_s3cfg, dest_file ):
-    print( "copy %s to %s" % ( src_file, dest_file ) )
+def copy_s3_file( src_s3cfg, src_file, dest_s3cfg, dest_file, public = False ):
     filename = download_s3_file( src_s3cfg, src_file)
     if filename is None:
        print( "Fail to download s3 file %s" % src_file )
     else:
-        if not upload_s3_file( filename, dest_s3cfg, dest_file ):
+        if not upload_s3_file( filename, dest_s3cfg, dest_file, public ):
             print( "Fail to copy %s to %s" % ( src_file, dest_file ) )
     rm_tempdir( os.path.dirname( filename ) )
 
 def download_s3_file( src_s3cfg, s3_file ):
     temp_file = os.path.join( mk_tempdir(), s3_basename( s3_file ) )
+    print( "download file %s from %s" % (s3_file, extract_s3host( src_s3cfg ) ) )
     try:
-        subprocess.check_output( ['s3cmd', '-c', src_s3cfg, 'get', '-f', s3_file, temp_file ] )
+        out = subprocess.check_output( ['s3cmd', '-c', src_s3cfg, 'get', '-f', s3_file, temp_file ] )
+        print( out )
         return temp_file
     except Exception as ex:
+        print( "fail to download file %s from %s" % ( s3_file, extract_s3host( src_s3cfg ) ) )
         rm_tempdir( os.path.dirname( temp_file ) )
         return None
 
-def upload_s3_file( local_file, dest_s3cfg, dest_file ):
+def upload_s3_file( local_file, dest_s3cfg, dest_file, public ):
     try:
-        subprocess.check_output( ['s3cmd', '-c', dest_s3cfg, 'put', local_file, dest_file ] )
+        if public:
+            print( "upload & public the file %s to %s" % (dest_file, extract_s3host( dest_s3cfg ) ) )
+            out = subprocess.check_output( ['s3cmd', '-c', dest_s3cfg, 'put', "-P", local_file, dest_file ] )
+        else:
+            print( "upload & don't public the file %s to %s" % (dest_file, extract_s3host( dest_s3cfg) ) )
+            out = subprocess.check_output( ['s3cmd', '-c', dest_s3cfg, 'put', local_file, dest_file ] )
+        print( out )
         return True
     except Exception as ex:
         print(ex)
         return False
 
+def extract_s3host( s3cfg ):
+    with open( s3cfg ) as fp:
+        for line in fp:
+            line = line.strip()
+            if line.startswith( "host_base" ):
+                fields = line.split( '=' )
+                if len( fields ) == 2:
+                    return fields[1].strip()
+    return None
 def parse_args():
     parser = argparse.ArgumentParser( description = "sync s3 storage between sites" )
-    parser.add_argument( "--src-s3cfg", help = "the source s3cfg file, default is ~/.s3cfg", default = os.path.expanduser( "~/.s3cfg" ), required = False )
-    parser.add_argument( "--dest-s3cfg", help = "the destination s3cfg file, default is ~/.s3cfg", default = os.path.expanduser( "~/.s3cfg" ), required = False )
+    parser.add_argument( "--src-s3cfg", help = "the source s3cfg file", required = True )
+    parser.add_argument( "--dest-s3cfg", help = "the destination s3cfg file", required = True )
     parser.add_argument( "--src-file", help = "the source file", required = True )
     parser.add_argument( "--dest-file", help = "the destination file", required = True )
+    parser.add_argument( "-P", "--public", action="store_true", help = "make the s3 file available in public", required = False )
+
     return parser.parse_args()
 
 def main():
     args = parse_args()
+    print( args )
     files = list_s3_path( args.src_s3cfg, args.src_file )
     exist_s3_buckets = []
     for f in files:
@@ -141,7 +160,7 @@ def main():
             else:
                 print( "Fail to make non-exist bucket %s" % dest_s3_bucket )
                 sys.exit( 1 )
-        copy_s3_file( args.src_s3cfg, f, args.dest_s3cfg, dest_filename )
+        copy_s3_file( args.src_s3cfg, f, args.dest_s3cfg, dest_filename, args.public )
 
 
 if __name__ == "__main__":
