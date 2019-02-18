@@ -6,6 +6,18 @@ import subprocess
 import sys
 import yaml
 
+class TextColor:
+    @staticmethod
+    def red( text ):
+        return '\033[0;31m%s\033[0m' % text
+
+    @staticmethod
+    def green( text ):
+        return '\033[0;32m%s\033[0m' % text
+
+    @staticmethod
+    def yellow( text ):
+        return '\033[0;33m%s\033[0m' % text
 
 class GlobalSettings:
     def __init__( self, global_settings ):
@@ -38,14 +50,17 @@ class Step:
             print( " ".join( command ) )
             return
         if not self._should_run( extra_vars ):
-            print( 'ignore "%s"' % " ".join( command ) )
+            if 'name' in self.step_config:
+                print( TextColor.yellow( 'Ignore %s' % self.step_config['name'] ) )
             return
+        if 'name' in self.step_config:
+            print( TextColor.green( "Execute:%s" % self.step_config['name'] ) )
         p = subprocess.Popen( command, stdout = subprocess.PIPE, stderr = subprocess.STDOUT )
-        stdout, stderr = p.communicate()
-        if stdout:
-            for line in stdout:
-                self.log.write( line )
-                if self.log != sys.stdout: sys.stdout.write( line )
+        while True:
+            if p.poll() is not None: break
+            line = p.stdout.readline()
+            self.log.write( line )
+            if self.log != sys.stdout: sys.stdout.write( line )
 
     def get_image( self ):
         return self.step_config["image"] if "image" in self.step_config else self.global_settings.get_image()
@@ -125,7 +140,7 @@ class DockerCommandBuilder:
         if self.step.in_background():
             command.append( "-d" )
         else:
-            command.append( "-it" )
+            command.extend( ["-it", "--rm"] )
         self._add_extra_hosts( command )
         self._add_volumes( command )
         self._add_env( command )
@@ -218,7 +233,7 @@ def parse_args():
     parser = argparse.ArgumentParser( description = "docker pipeline tool" )
     parser.add_argument( "-c", "--config", help = "the pipeline .yaml file, default is pipeline.yaml", required = False, default = "pipeline.yaml")
     parser.add_argument( "-e", "--extra-vars", help = "the extra variables in key=value format", required = False )
-    parser.add_argument( "--log-file", help = "the log file", required = False )
+    parser.add_argument( "--log-file", help = "the log file", default = "pipeline.log", required = False )
     parser.add_argument( "--dry-run", action = "store_true", help = "dry run the command", required = False )
     return parser.parse_args()
 
