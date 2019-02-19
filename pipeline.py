@@ -54,6 +54,16 @@ class Step:
         self.log = log
 
     def execute( self, extra_vars, dry_run = False ):
+        """
+        execute the step
+
+        Args:
+            extra_vars: extra variables in dict
+
+        Return:
+            0, succeed to execute the step
+            non-zero, fail to execute the step
+        """
         command = DockerCommandBuilder( self, self.network ).build()
         if dry_run:
             self.log.write( "%s\n" % " ".join( command ) )
