@@ -428,7 +428,7 @@ def start_services( config, global_settings, network, log ):
     """
     services = []
     if 'services' not in config:
-        return
+        return services, True
 
     for service_conf in config['services']:
         service = Service( global_settings, service_conf, network, log )
