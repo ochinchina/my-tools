@@ -37,19 +37,24 @@ class TcpProxy:
             pass
 
     def create_listener( self, addr, port ):
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        try:
-            s.bind((addr, port))
-            s.listen( 10 )
-            while True:
-                conn, remote_addr = s.accept()
-                self.do_proxy( conn )
-        except Exception as ex:
-            print ex
-        try:
-            s.close()
-        except:
-            pass
+        addrinfo = socket.getaddrinfo( addr, port )
+        for item in addrinfo:
+            listen_ok = False
+            s = socket.socket( item[0], socket.SOCK_STREAM )
+            try:
+                s.bind((item[4][0], item[4][1]))
+                s.listen( 10 )
+                listen_ok = True
+                while True:
+                    conn, remote_addr = s.accept()
+                    self.do_proxy( conn )
+            except Exception as ex:
+                print ex
+            try:
+                s.close()
+            except:
+                pass
+            if listen_ok: break
 
 def parse_args():
     parser = argparse.ArgumentParser( description = "TCP proxy" )
