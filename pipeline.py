@@ -34,7 +34,7 @@ class GlobalSettings:
         return self.global_settings["env"] if "env" in self.global_settings else None
 
     def get_extra_hosts( self ):
-        return self.global_settings["extra_hosts"] if "extra_hosts" in self.global_settings else None
+        return os.path.expandvars( self.global_settings["extra_hosts"] ) if "extra_hosts" in self.global_settings else None
 
     def get_volumes( self ):
         return self.global_settings["volumes"] if "volumes" in self.global_settings else None
