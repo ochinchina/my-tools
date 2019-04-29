@@ -355,3 +355,146 @@ Slave_Non_Transactional_Groups: 0
 1 row in set (0.001 sec)
 
 ```
+### Start-up Maxscale for FailOver switch
+
+#### grant maxscale
+
+Execute in both master & slave mariadb:
+
+```shell
+# mysql -uroot -p$MYSQL_ROOT_PASSWORD
+MariaDB [(none)]> GRANT SELECT ON mysql.user TO 'repuser'@'%';
+Query OK, 0 rows affected (0.065 sec)
+
+MariaDB [(none)]> GRANT SELECT ON mysql.db TO 'repuser'@'%';
+Query OK, 0 rows affected (0.116 sec)
+
+MariaDB [(none)]> GRANT SELECT ON mysql.tables_priv TO 'repuser'@'%';
+Query OK, 0 rows affected (0.102 sec)
+
+MariaDB [(none)]> GRANT SELECT ON mysql.roles_mapping TO 'repuser'@'%';
+Query OK, 0 rows affected (0.103 sec)
+
+MariaDB [(none)]> GRANT SHOW DATABASES ON *.* TO 'repuser'@'%';
+Query OK, 0 rows affected (0.100 sec)
+
+MariaDB [(none)]> GRANT SUPER ON *.* TO 'repuser'@'%';
+Query OK, 0 rows affected (0.100 sec)
+
+MariaDB [(none)]> GRANT RELOAD ON *.* TO 'repuser'@'%';
+
+MariaDB [(none)]> flush privileges;
+Query OK, 0 rows affected (0.038 sec)
+
+```
+
+#### create $HOME/start-maxscale.sh script
+
+create the $HOME/start-maxscale.sh script with following contents:
+
+```shell
+#!/bin/sh
+
+maxkeys /var/lib/maxscale/
+chown maxscale:maxscale /var/lib/maxscale/.secrets
+export REP_PASSWORD=$(maxpasswd /var/lib/maxscale/ password@123)
+echo $REP_PASSWORD
+echo >/etc/maxscale.cnf
+cat /maxscale.cnf.template | while read line; do echo $(eval echo `echo $line`) >>/etc/maxscale.cnf; done
+maxscale -d -U maxscale
+
+```
+
+
+#### create $HOME/maxscale.cnf.template
+
+```ini
+[maxscale]
+threads=4
+log_info=1
+log_debug=1
+
+[Replication-Monitor]
+type=monitor
+module=mariadbmon
+servers=server1,server2
+user=repuser
+passwd=$REP_PASSWORD
+replication_user=repuser
+replication_password=$REP_PASSWORD
+monitor_interval=2000
+auto_failover=true
+failover_timeout=10
+auto_rejoin=true
+failcount=5
+master_failure_timeout=2
+verify_master_failure=true
+switchover_timeout=90
+detect_stale_master=true
+detect_stale_slave=true
+
+[Write-Service]
+type=service
+router=readconnroute
+router_options=master
+user=repuser
+passwd=$REP_PASSWORD
+servers=server1,server2
+
+
+
+[Write-Listener]
+type=listener
+service=Write-Service
+protocol=MySQLClient
+# explicitly ipv4, default is ipv6
+address=0.0.0.0
+port=3306
+
+
+
+[CLI]
+type=service
+router=cli
+
+[CLI-Listener]
+type=listener
+service=CLI
+protocol=maxscaled
+socket=default
+
+
+[server1]
+type=server
+address=192.168.0.1
+port=3306
+protocol=MariaDBBackend
+
+[server2]
+type=server
+address=192.168.0.2
+port=3306
+protocol=MariaDBBackend
+
+```
+
+#### start the MaxScale
+
+```shell
+# docker run --name maxscale -v $HOME/maxscale.cnf.template:/maxscale.cnf.template -v $HOME/start-maxscale.sh:/start-maxscale.sh  -d --entrypoint /start-maxscale.sh  mariadb/maxscale:2.3 
+```
+
+#### check the master & slave mariadb
+
+```shell
+# docker exec -it maxscale /bin/bash
+# maxadmin
+MaxScale> list servers
+Servers.
+-------------------+-----------------+-------+-------------+--------------------
+Server             | Address         | Port  | Connections | Status
+-------------------+-----------------+-------+-------------+--------------------
+server1            | 192.168.0.1     |  3306 |           0 | Master, Running
+server2            | 192.168.0.2     |  3306 |           0 | Slave, Running
+-------------------+-----------------+-------+-------------+--------------------
+```
