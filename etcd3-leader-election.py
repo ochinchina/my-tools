@@ -59,7 +59,7 @@ class LeaderElection:
         try:
             while True:
                 lease.refresh()
-                time.sleep( self.lease_ttl / 2.0 - 0.1 )
+                time.sleep( self.lease_ttl / 3.0 - 0.01 )
         except (Exception, KeyboardInterrupt):
             pass
         finally:
