@@ -17,6 +17,7 @@ def find_files( path ):
     files = []
     os.path.walk( path, lambda arg, dirname, names: files.extend( [ os.path.join( dirname, name ) for name in names ] ), None )
     return filter( lambda filename: os.path.isfile( filename ), files )
+    #return files
 
 def sort_files_by_name( files, reverse = False ):
     return sorted( files, reverse = reverse )
@@ -35,7 +36,25 @@ def sort_files_by_size( files, reverse = False ):
         files_with_size.append( ( filename, os.path.getsize( filename ) ) )
     return map( lambda x: x[0], sorted( files_with_size, key = lambda x: x[1], reverse = reverse  ) )
 
+def no_sort( files, reverse = False ):
+    return files
+
+def get_biggest_file_size( files ):
+    biggest_file_size = 0
+    for filename in files:
+        if os.path.isfile( filename ):
+            size = os.path.getsize( filename )
+        else:
+            size = 99
+        if size > biggest_file_size:
+            biggest_file_size = size
+    return biggest_file_size
+
 def print_files( files, with_color = False ):
+    biggest_file_size = get_biggest_file_size( files )
+
+    size_width = len( "%d" % biggest_file_size )
+    size_format = "%%%ds" % size_width
     for filename in files:
         try:
             if os.path.isdir( filename ):
@@ -45,7 +64,10 @@ def print_files( files, with_color = False ):
             else:
                 color_func = no_color
 
-            text = subprocess.check_output( [ "ls", "-l", filename] ).strip()
+            text = subprocess.check_output( [ "ls", "-l", filename] ).strip().split()
+            text[4] = size_format % text[4]
+            text = " ".join( text )
+
             if with_color:
                 print color_func( text )
             else:
@@ -55,7 +77,7 @@ def print_files( files, with_color = False ):
 
 def parse_args():
     parser = argparse.ArgumentParser( description = "find files under directory" )
-    parser.add_argument( "--sort-by", help = "the sorted method, default is name", choices = [ "date", "name", "size"], default = "name" )
+    parser.add_argument( "--sort-by", help = "the sort method", choices = [ "date", "name", "size"] )
     parser.add_argument( "--head", help = "first n lines" )
     parser.add_argument( "--tail", help = "last n lines" )
     parser.add_argument( "--without-color", help = "no colorful output", action = "store_true" )
@@ -67,7 +89,7 @@ def get_sort_func( sort_method ):
                   "date": sort_files_by_date,
                   "size": sort_files_by_size }
 
-    return sort_funcs[ sort_method ]
+    return sort_funcs[ sort_method ] if sort_method in sort_funcs else no_sort
 
 def main():
     args = parse_args()
@@ -77,15 +99,22 @@ def main():
 
     if args.head is not None:
         head_files = files[0: int( args.head ) ]
+    else:
+        head_files = None
     if args.tail is not None:
         tail_files = files[-1*int( args.tail): -1]
+    else:
+        tail_files = None
 
+    printed_files = []
     if head_files is not None:
-        print_files( head_files, with_color = not args.without_color )
+        printed_files.extend( head_files )
     if tail_files is not None:
-        print_files( tail_files, with_color = not args.without_color )
-    if head_files is None and tail_files is None:
-        print_files( files, with_color = not args.without_color )
+        printed_files.extend( tail_files )
+    if len( printed_files ) <= 0:
+        printed_files = files
+    print_files( printed_files, with_color = not args.without_color )
 
 if __name__ == "__main__":
     main()
+
