@@ -133,8 +133,7 @@ class GitHttp:
                 os.remove( filename )
                 return "Success to remove file %s" % filename
         except Exception as ex:
-            print ex
-            return ex, 500
+            return str(ex), 500
 
 
     def download( self):
