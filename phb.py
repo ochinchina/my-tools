@@ -6,8 +6,10 @@ import time
 import threading
 import traceback
 import sys
+import logging
+import logging.handlers
 
-
+logger = logging.getLogger( "benchmark" )
 class RequestManager:
     def __init__( self, total ):
         self.total = total
@@ -61,6 +63,7 @@ def parse_args():
     parser.add_argument( "-c", help = "concurrency requests, default 1", default = 1, type = int )
     parser.add_argument( "-n", help = "amount of requests, default 100", default = 100, type = int )
     parser.add_argument( "-d", "--data", help = "the data to be sent", required = False )
+    parser.add_argument( "--log-file", help = "the log file", required = False )
     parser.add_argument( "url", help = "the url" )
     return parser.parse_args()
 
@@ -69,10 +72,10 @@ def do_request( req_mgr, url, headers, data ):
     while True:
         ok, print_info, num = req_mgr.nextRequest()
         if not ok: break
+        start = time.time()
         try:
             req = urllib2.Request( url, data = data )
             for header in headers: req.add_header( header, headers[header] )
-            start = time.time()
             resp = urllib2.urlopen( req )
             total = int( (time.time() - start ) * 1000 )
             if resp.getcode() / 100 == 2:
@@ -80,8 +83,10 @@ def do_request( req_mgr, url, headers, data ):
             else:
                 req_mgr.failed( total )
         except Exception as ex:
-            traceback.print_exc(file=sys.stdout)
-            print ex
+            traceback.print_exc(file=logger)
+            total = int( (time.time() - start ) * 1000 )
+            req_mgr.failed( total )
+
         if print_info:
             print "request finished %d" % num
 
@@ -103,6 +108,14 @@ def loadData( data ):
     else:
         return data
 
+def init_logger( log_file ):
+    if log_file is None:
+        handler = loggging.StreamHandler( sys.stdout )
+    else:
+        handler = logging.handlers.RotatingFileHandler( log_file, maxBytes = 50 * 1024 * 1024, backupCount = 5 )
+    handler.setLevel( logging.DEBUG )
+    handler.setFormat( logging.Formatter( '%(asctime)s %(name)s - %(message)s' ) )
+    logger.addHandler( handler )
 def main():
     args = parse_args()
     req_mgr = RequestManager( args.n )
