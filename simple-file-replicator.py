@@ -60,7 +60,7 @@ class ModuleFiles:
                 name = os.path.join( "/", self.module_name, f[ len( self.path ) + 1:] )
                 size = os.path.getsize( f )
                 allFiles[ name ] = size
-        
+
         with self._lock:
             self.files = allFiles
             return self.files
@@ -156,7 +156,7 @@ class MasterChecker:
             self.is_master_node = True
         else:
             self.is_master_node = False
-            th = threading.Thread( target = self._check_master )
+            th = threading.Thread( target = self._start_check_master )
             th.setDaemon( True )
             th.start()
 
@@ -174,7 +174,7 @@ class MasterChecker:
     def _start_check_master( self ):
         while True:
             ret = self._check_master()
-            with self.locking:
+            with self._locking:
                 self.is_master_node = ret
             time.sleep( self.check_interval )
 
@@ -184,15 +184,15 @@ class MasterChecker:
         except Exception as ex:
             logger.error( "fail to check the master with script %s, error:%s" % (self.master_check_script, ex ) )
 
-        return False 
+        return False
 
 class ReplicateServer:
     def __init__( self, master_checker, fileConfig ):
         self.master_checker = master_checker
         self.module_files = {}
         for item in fileConfig:
-            self.module_files[ item['name'] ] = ModuleFiles( item['name'], 
-                    item['dir'], 
+            self.module_files[ item['name'] ] = ModuleFiles( item['name'],
+                    item['dir'],
                     item['include-patterns'] if 'include-patterns' in item else None,
                     item['exclude-patterns'] if 'exclude-patterns' in item else None,
                     int( item['update-interval'] ) if 'update-interval' in item else 300 )
@@ -241,7 +241,7 @@ class ReplicateServer:
 
     def async_push_file( self ):
         """
-        push the files to the client specified URL. 
+        push the files to the client specified URL.
         """
         if not self.master_checker.is_master():
             return "Service Unavailable", 503
@@ -250,7 +250,7 @@ class ReplicateServer:
         url = file_download_request['url']
         filename = file_download_request['file']
         self.async_push.add_request( {"filename":self._get_download_file_abspath( filename ), "url": '%s?file=%s' % ( url, filename ) } )
-            
+
         return "schedule for push"
 
 
@@ -398,7 +398,7 @@ class ReplicateServerDiscover:
         Return: server name/ip if succeed to find otherwise return None
         """
         try:
-            output = subprocess.check_output( [ self.host_script ] ).strip()
+            output = subprocess.check_output( [ host_script ] ).strip()
             return output if len( output ) > 0 else None
         except Exception as ex:
             logger.error( "fail to run the script %s to find server with error:%s" % ( self.host_script, ex ) )
@@ -558,7 +558,7 @@ def parse_args():
     server_parser.add_argument( "--host", help = "the host/ip address to listen, default is 0.0.0.0", default = "0.0.0.0", required = False )
     server_parser.add_argument( "--port", help = "the listening port number, default is 5000", default = 5000, type = int, required = False )
     server_parser.add_argument( "--master-checker", help = "script to check if I'm the master node", required = False )
-    server_parser.add_argument( "--master-check-interval", help = "the master check interval if parameter --master-checker is set", required = False, default = 10 )
+    server_parser.add_argument( "--master-check-interval", help = "the master check interval if parameter --master-checker is set", type = int, required = False, default = 10 )
     server_parser.add_argument( "--file-config", help = "the file configuration in .json format", required = True )
     server_parser.add_argument( "--log-file", help = "the log filename", required = False )
 
@@ -596,4 +596,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
