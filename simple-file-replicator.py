@@ -180,7 +180,7 @@ class MasterChecker:
 
     def _check_master( self ):
         try:
-            return os.sytem( self.master_check_script ) == 0
+            return os.system( self.master_check_script ) == 0
         except Exception as ex:
             logger.error( "fail to check the master with script %s, error:%s" % (self.master_check_script, ex ) )
 
