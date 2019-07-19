@@ -398,7 +398,7 @@ class ReplicateServerDiscover:
         Return: server name/ip if succeed to find otherwise return None
         """
         try:
-            output = subprocess.check_output( [ host_script ] ).strip()
+            output = subprocess.check_output( [ self.host_script ] ).strip()
             return output if len( output ) > 0 else None
         except Exception as ex:
             logger.error( "fail to run the script %s to find server with error:%s" % ( self.host_script, ex ) )
