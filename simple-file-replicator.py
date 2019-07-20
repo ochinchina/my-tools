@@ -312,7 +312,7 @@ def run_server( args ):
     app.add_url_rule( "/download", "download", replicate_server.download_file, methods = ['GET'] )
     app.add_url_rule( "/async_push", "async_push", replicate_server.async_push_file, methods = ['POST'] )
     app.logger.addHandler( logHandler )
-    app.run( host = args.host, port = int(args.port) )
+    app.run( host = args.host, port = int(args.port), debug = True )
 
 def load_push_config( filename ):
     """
@@ -398,7 +398,7 @@ class ReplicateServerDiscover:
         Return: server name/ip if succeed to find otherwise return None
         """
         try:
-            output = subprocess.check_output( [ host_script ] ).strip()
+            output = subprocess.check_output( [ self.host_script ] ).strip()
             return output if len( output ) > 0 else None
         except Exception as ex:
             logger.error( "fail to run the script %s to find server with error:%s" % ( self.host_script, ex ) )
@@ -596,3 +596,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
