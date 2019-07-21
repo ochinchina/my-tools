@@ -15,6 +15,7 @@ import time
 import urllib2
 from Queue import Queue
 from flask import request, Response
+import traceback
 
 logger = logging.getLogger( __name__ )
 logHandler = None
@@ -255,6 +256,9 @@ class ReplicateServer:
 
 
     def _get_download_file_abspath( self, name ):
+        """
+        get the absolute path of the name
+        """
         for module_name in self.module_files:
             path = self.module_files[ module_name ].get_abspath( name )
             if path is not None:
@@ -406,43 +410,60 @@ class ReplicateServerDiscover:
 
 
 class ReplicateClient:
-    def __init__( self, replicate_server_discover, server_port, push_host, push_port, push_config ):
+    def __init__( self, replicate_server_discover, master_checker, server_port, push_host, push_port, module_files ):
+        """
+        init a ReplicateClient with parameters
+
+        Args:
+        replicate_server_discover - the master discover object useed to find the master node
+        master_checker - check if this node is master node
+        server_port - the master listening port
+        push_host - the listening ip address used to receive the files pushed from master
+        push_port - the listening port number
+        module_files - the modules will be replicated to this node from master
+        """
         self.replicate_server_discover = replicate_server_discover
+        self.master_checker = master_checker
         self.server_port = server_port
         self.push_host = push_host
         self.push_port = push_port
-        self.push_config = push_config
-        self.module_files = {}
-        for item in push_config:
-            update_interval = 300 if 'update-interval' not in item else int( item['update-interval'] )
-            name = item['name']
-            self.module_files[ name ] = ModuleFiles( name, item['dir'], None, None, update_interval )
-
-        self._start_push_server()
+        self.module_files = module_files
 
     def start_replicate( self ):
+        """
+        start to do the replication from master to slave
+        """
         while True:
+            if self.master_checker.is_master():
+                logger.debug( "It is master node, no replication" )
+                sleep_seconds = 60
+                continue
+            sleep_seconds = []
             for module_name in self.module_files:
-                sleep_seconds = 60 if self._replicate_module( module_name ) <= 0 else 10
-                time.sleep( sleep_seconds )
+                sleep_seconds.append( 60 if self._replicate_module( module_name ) <= 0 else 10 )
+            time.sleep( max( sleep_seconds ) )
 
     def _replicate_module( self, module_name ):
         server = self.replicate_server_discover.get_server()
 
-        if server is None or len( server ) <= 0: return 0
+        if server is None or len( server ) <= 0:
+            logger.error( "fail to find replicate server" )
+            return 0
 
         remote_files = self._download_module_files( server, module_name )
         # don't do anything is fail to download the remote module files
-        if remote_files is not None:
+        if remote_files is None:
+            logger.info( "no remote files downloaded" )
+            return 0
+        else:
             local_files = self.module_files[module_name].update_files()
             new_files = [ f for f in remote_files if f not in local_files or remote_files[f] != local_files[f] ]
             deleted_files = [ f for f in local_files if f not in remote_files ]
+            logger.info( "number of remote files is %d, number of local files is %s, number of new files is %d, number of deleted files is %s" % ( len( remote_files ), len( local_files ), len( new_files ), len( deleted_files ) ) )
 
             self._delete_local_files( deleted_files )
             self._download_files( server, new_files )
             return len( new_files ) + len( deleted_files )
-        else:
-            return 0
 
     def _delete_local_files( self, files ):
         """
@@ -460,6 +481,7 @@ class ReplicateClient:
                         pass
             except Exception as ex:
                 logger.error( "fail to remove file %s:%s" % (f, ex ))
+                traceback.print_exc()
     def _download_files( self, server, files ):
         """
         download the remote files to local
@@ -501,29 +523,26 @@ class ReplicateClient:
         """
         elements = split_path( filename )
         if len( elements ) > 0:
-            for item in self.push_config:
-                if elements[0] == item['name']:
-                    return os.path.join( item['dir'], *elements[1:] )
+            for module_name in self.module_files:
+                item = self.module_files[ module_name ]
+                if elements[0] == item.get_module_name():
+                    return os.path.join( item.path, *elements[1:] )
         return None
 
     def _download_module_files( self, server, module_name ):
         """
         downlolad all files in one module
         """
+        url = "http://%s:%d/list?module=%s" % ( server, self.server_port, module_name )
         try:
-            resp = urllib2.urlopen( "http://%s:%d/list?module=%s" % ( server, self.server_port, module_name ) )
+            logger.info( "start to download module files from %s" % url )
+            resp = urllib2.urlopen( url )
             if resp.getcode() / 100 in (2,3):
                 data = resp.read()
                 return json.loads( data )
         except Exception as ex:
-            logger.error( "fail to download files included in module %s:%s" % (module_name, ex ) )
+            logger.error( "fail to download files from %s in module %s:%s" % (url, module_name, ex ) )
         return None
-
-    def _start_push_server( self ):
-        push_server = PushServer( self.push_host, self.push_port, self.push_config, self._file_pushed )
-        th = threading.Thread( target = push_server.start )
-        th.setDaemon( True )
-        th.start()
 
     def _get_module_name( self, name ):
         """
@@ -531,7 +550,7 @@ class ReplicateClient:
         """
         return split_path( name )[0]
 
-    def _file_pushed( self, name ):
+    def file_pushed( self, name ):
         """
         a file is pushed to local system
         """
@@ -546,9 +565,20 @@ def run_client( args ):
     load as client
     """
     push_config = load_push_config( args.push_config )
+    module_files = {}
+    for item in push_config:
+        update_interval = 300 if 'update-interval' not in item else int( item['update-interval'] )
+        name = item['name']
+        module_files[ name ] = ModuleFiles( name, item['dir'], None, None, update_interval )
+
+    master_checker = MasterChecker( args.master_checker, args.master_check_interval )
     replicate_server_discover = ReplicateServerDiscover( args.host, args.host_script )
-    repliate_client = ReplicateClient( replicate_server_discover, args.port, args.push_host, args.push_port, push_config )
-    repliate_client.start_replicate()
+    replicate_client = ReplicateClient( replicate_server_discover, master_checker, args.port, args.push_host, args.push_port, module_files )
+    push_server = PushServer( args.push_host, args.push_port, push_config, replicate_client.file_pushed )
+    th = threading.Thread( target = replicate_client.start_replicate )
+    th.setDaemon( True )
+    th.start()
+    push_server.start()
 
 def parse_args():
     parser = argparse.ArgumentParser( description = "replicate files between the nodes" )
@@ -558,7 +588,7 @@ def parse_args():
     server_parser.add_argument( "--host", help = "the host/ip address to listen, default is 0.0.0.0", default = "0.0.0.0", required = False )
     server_parser.add_argument( "--port", help = "the listening port number, default is 5000", default = 5000, type = int, required = False )
     server_parser.add_argument( "--master-checker", help = "script to check if I'm the master node", required = False )
-    server_parser.add_argument( "--master-check-interval", help = "the master check interval if parameter --master-checker is set", type = int, required = False, default = 10 )
+    server_parser.add_argument( "--master-check-interval", help = "the master check interval in seconds if parameter --master-checker is set, default is 10", type = int, required = False, default = 10 )
     server_parser.add_argument( "--file-config", help = "the file configuration in .json format", required = True )
     server_parser.add_argument( "--log-file", help = "the log filename", required = False )
 
@@ -568,6 +598,8 @@ def parse_args():
     client_parser.add_argument( "--host", help = "the server host name or ip address", required = False )
     client_parser.add_argument( "--host-script", help = "get the server name or ip address from host", required = False )
     client_parser.add_argument( "--port", help = "the server listening port number, default is 5000", default = 5000, required = False, type = int )
+    client_parser.add_argument( "--master-checker", help = "script to check if I'm the master node", required = False )
+    client_parser.add_argument( "--master-check-interval", help = "the master check interval in seconds if parameter --master-checker is set, default is 10", type = int, required = False, default = 10 )
     client_parser.add_argument( "--push-host", help = "async push host name or ip address, default is 0.0.0.0", required = False, default = "0.0.0.0" )
     client_parser.add_argument( "--push-port", help = "async push port number, default is 5000", required = False, type = int, default = 5000 )
     client_parser.add_argument( "--push-config", help = "the push configuration in .json format", required = True )
@@ -596,4 +628,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
