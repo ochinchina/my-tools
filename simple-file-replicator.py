@@ -215,11 +215,14 @@ class ReplicateServer:
             return "Service Unavailable", 503
         if 'module' in request.args:
             module_name = request.args['module']
+            logger.info( "get the files in module %s" % module_name )
             if module_name not in self.files:
+                logger.error( "No such module %s" % module_name )
                 return "No such module %s" % module_name, 404
             with self._lock:
                 return Response( json.dumps( self.files[module_name] ), status = 200, mimetype='application/json' )
 
+        logger.info( "get all files in all modules" )
         with self._lock:
             all_files = {}
             for module_name in self.files: all_files.update( self.files[module_name] )
@@ -435,8 +438,8 @@ class ReplicateClient:
         """
         while True:
             if self.master_checker.is_master():
-                logger.debug( "It is master node, no replication" )
-                sleep_seconds = 60
+                logger.info( "It is master node, no replication" )
+                time.sleep( 60 )
                 continue
             sleep_seconds = []
             for module_name in self.module_files:
@@ -572,6 +575,7 @@ def run_client( args ):
         module_files[ name ] = ModuleFiles( name, item['dir'], None, None, update_interval )
 
     master_checker = MasterChecker( args.master_checker, args.master_check_interval )
+    time.sleep( 2 )
     replicate_server_discover = ReplicateServerDiscover( args.host, args.host_script )
     replicate_client = ReplicateClient( replicate_server_discover, master_checker, args.port, args.push_host, args.push_port, module_files )
     push_server = PushServer( args.push_host, args.push_port, push_config, replicate_client.file_pushed )
