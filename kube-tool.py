@@ -63,6 +63,8 @@ class Pod:
         return self.pod_info['metadata']['name']
 
     def get_status( self ):
+        crashed = filter( lambda x: x == "CrashLoopBackOff", map( lambda x: x.get_status(), self.containers ) )
+        if len( crashed ) > 0: return "CrashLoopBackOff"
         terminatings = filter( lambda x: x == "Terminating", map( lambda x: x.get_status(), self.containers ) )
         return self.pod_info['status']['phase'] if len( terminatings ) <= 0 else 'Terminating'
 
@@ -86,6 +88,13 @@ class K8S:
         pods_info = json.loads( out )
         return [ Pod( pod_info ) for pod_info in pods_info['items'] ]
 
+def colorful_status( status ):
+    if status == "CrashLoopBackOff":
+        return TextColor.red( status )
+    elif status == "Terminating":
+        return TextColor.red( status )
+    return status
+
 def get_pod( args ):
     k8s = K8S()
     pods = k8s.list_pods( args.namespace )
@@ -98,12 +107,13 @@ def get_pod( args ):
             containers = pod.get_containers()
             for i in xrange( len(containers) ):
                 container = containers[i]
+                status = colorful_status( container.get_status() )
                 if i == 0:
-                    x.add_row( [ TextColor.green( t ) for t in [ pod.get_name(), container.get_name(), container.get_status() ] ] )
+                    x.add_row( [ TextColor.green( t ) for t in [ pod.get_name(), container.get_name(), status  ] ] )
                 else:
-                    x.add_row( [ "", container.get_name(), container.get_status() ] )
+                    x.add_row( [ "", container.get_name(), status ] )
         else:
-            x.add_row( [pod.get_name(), pod.get_pod_ip(), pod.get_node_name(), pod.get_host_ip(), pod.get_status() ] )
+            x.add_row( [pod.get_name(), pod.get_pod_ip(), pod.get_node_name(), pod.get_host_ip(), colorful_status( pod.get_status() ) ] )
 
     print x
 
