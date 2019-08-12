@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from prettytable import PrettyTable
@@ -99,11 +100,12 @@ def get_pod( args ):
     k8s = K8S()
     pods = k8s.list_pods( args.namespace )
     x = PrettyTable()
-    x.field_names  = ['pod', 'container', 'status'] if args.with_container else [ 'pod', 'pod-ip', 'host', 'host-ip', 'status' ]
+    with_container = args.with_container or args.pod_name is not None
+    x.field_names  = ['pod', 'container', 'status'] if with_container else [ 'pod', 'pod-ip', 'host', 'host-ip', 'status' ]
     for pod in pods:
         if args.pod_name is not None and pod.get_name() != args.pod_name:
             continue
-        if args.with_container:
+        if with_container:
             containers = pod.get_containers()
             for i in xrange( len(containers) ):
                 container = containers[i]
@@ -117,6 +119,8 @@ def get_pod( args ):
 
     print x
 
+def get_logs( args ):
+    os.system( "kubectl logs %s -c %s -n %s" % ( args.pod_name, args.c, args.namespace ) )
 def parse_args():
     parser = argparse.ArgumentParser( description = "kubernetes enhance tools" )
     subparsers = parser.add_subparsers( help = "sub commands" )
@@ -127,6 +131,11 @@ def parse_args():
     get_pod_parser.add_argument( "--with-container", action = "store_true", help = "list pod with container information" )
     get_pod_parser.add_argument( "pod_name", nargs = "?", help = "the pod name" )
     get_pod_parser.set_defaults( func = get_pod )
+    logs_parser = subparsers.add_parser( "logs", help = "get logs of a container" )
+    logs_parser.add_argument( "--namespace", "-n", help = "the kubernetes namespace", default = "default" )
+    logs_parser.add_argument( "-c", help = "the name of container", required = False )
+    logs_parser.add_argument( "pod_name", help = "the pod name" )
+    logs_parser.set_defaults( func = get_logs )
     return parser.parse_args()
 
 
