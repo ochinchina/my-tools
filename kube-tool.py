@@ -101,7 +101,7 @@ def get_pod( args ):
     pods = k8s.list_pods( args.namespace )
     x = PrettyTable()
     with_container = args.with_container or args.pod_name is not None
-    x.field_names  = ['pod', 'container', 'status'] if with_container else [ 'pod', 'pod-ip', 'host', 'host-ip', 'status' ]
+    x.field_names  = ['pod', 'container', 'status', "image"] if with_container else [ 'pod', 'pod-ip', 'host', 'host-ip', 'status']
     for pod in pods:
         if args.pod_name is not None and pod.get_name() != args.pod_name:
             continue
@@ -111,9 +111,9 @@ def get_pod( args ):
                 container = containers[i]
                 status = colorful_status( container.get_status() )
                 if i == 0:
-                    x.add_row( [ TextColor.green( t ) for t in [ pod.get_name(), container.get_name(), status  ] ] )
+                    x.add_row( [ TextColor.green( t ) for t in [ pod.get_name(), container.get_name(), status, container.get_image()  ] ] )
                 else:
-                    x.add_row( [ "", container.get_name(), status ] )
+                    x.add_row( [ "", container.get_name(), status, container.get_image() ] )
         else:
             x.add_row( [pod.get_name(), pod.get_pod_ip(), pod.get_node_name(), pod.get_host_ip(), colorful_status( pod.get_status() ) ] )
 
