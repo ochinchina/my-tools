@@ -102,7 +102,7 @@ class WGS84:
         self.longitude = longitude
         self.altitude = altitude
 
-    def to_ecef( self ):
+    def to_ECEF( self ):
         """
         convert from WGS84 to ECEF coordinate system
         """
@@ -117,7 +117,7 @@ class WGS84:
         z = (n * (1.0 - E1SQR) + altitude) * sinLatitude
         return ECEF(x, y, z)
 
-    def to_gauss( self ):
+    def to_GAUSS( self ):
         """
         convert WGS84 to Gauss projection
         """
@@ -223,7 +223,7 @@ class ENU:
         return ECEF(x, y, z)
 
     @classmethod
-    def to_WGS84( self, coordinate, origin ):
+    def to_WGS84( cls, coordinate, origin ):
         """
         converted to WGS84
 
@@ -280,7 +280,6 @@ class ECEF:
 
         return ENU(x, y, z)
 
-    @classmethod
     def to_WGS84( self ):
         """
         convert to WGS84 point
