@@ -22,7 +22,6 @@ def list_all_ips():
             result[dev_name] = {}
         else:
             words = line.split()
-            print words
             if len(words) > 2 and words[0] == 'inet':
                 ipv4 = words[1]
                 if 'ipv4' not in result[dev_name]:
