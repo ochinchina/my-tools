@@ -21,18 +21,18 @@ def list_all_ips():
             dev_name = words[1][0:-1]
             result[dev_name] = {}
         else:
-            line = line.strip()
             words = line.split()
+            print words
             if len(words) > 2 and words[0] == 'inet':
                 ipv4 = words[1]
                 if 'ipv4' not in result[dev_name]:
                     result[dev_name]['ipv4'] = []
                     result[dev_name]['ipv4'].append( ipv4 )
-                elif len(words) > 2 and words[0] == 'inet6':
-                    ipv6 = words[1]
-                    if 'ipv6' not in result[dev_name]:
-                        result[dev_name]['ipv6'] = []
-                        result[dev_name]['ipv6'].append( ipv6 )
+            elif len(words) > 2 and words[0] == 'inet6':
+                ipv6 = words[1]
+                if 'ipv6' not in result[dev_name]:
+                    result[dev_name]['ipv6'] = []
+                    result[dev_name]['ipv6'].append( ipv6 )
     return result
 
 def print_all_ips( args ):
