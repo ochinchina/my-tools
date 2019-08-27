@@ -6,6 +6,9 @@ import subprocess
 import tempfile
 
 
+def get_s3_cfg():
+    return os.environ["S3CFG"] if "S3CFG" in os.environ else "%s/%s" % (os.environ["HOME"], ".s3cfg")
+
 def parse_build_between( build_between_info ):
     """
     parse the build between in format "[start_time-]end_time", the start_time and end_time is in
@@ -76,9 +79,9 @@ def save_images( args ):
         images = []
 
     for image in images:
-        save_image( image, args.dest, args.public )
+        save_image( image, args.dest, args.public, config = args.config )
 
-def save_image( image, dest, public ):
+def save_image( image, dest, public, config = None ):
     base_image_name = image.split( '/' )[-1]
     tmp = base_image_name.split(':' )
     if dest.startswith( 's3://'):
@@ -95,7 +98,7 @@ def save_image( image, dest, public ):
     os.system( "gzip %s" % filename )
     filename = "%s.gz" % filename
     if dest.startswith( 's3://' ):
-        command = "s3cmd put %s %s %s" % (filename, "-P" if public else "", dest )
+        command = "s3cmd -c %s put %s %s %s" % ( config or get_s3_cfg(), filename, "-P" if public else "", dest )
         print command
         os.system( command )
         os.remove( filename )
@@ -103,7 +106,7 @@ def save_image( image, dest, public ):
 
 def load_images( args ):
     for src in args.src:
-        load_image( src, args.force )
+        load_image( src, args.force, config = args.config )
 
 def list_containers():
     result = []
@@ -154,7 +157,7 @@ def remove_image( image ):
             os.system( 'docker rm %s' % container['container-id'] )
     os.system( 'docker rmi %s' % image )
 
-def load_image( src, force ):
+def load_image( src, force, config = None ):
     """
     load docker image
 
@@ -163,7 +166,7 @@ def load_image( src, force ):
     """
     if src.startswith( 's3://' ):
         dest_dir = os.path.abspath( tempfile.mkdtemp() )
-        os.system( "s3cmd get %s %s" % ( src, dest_dir ) )
+        os.system( "s3cmd -c %s get %s %s" % ( config or get_s3_cfg(), src, dest_dir ) )
         src_file = "%s/%s" % (dest_dir, os.path.basename( src ) )
     else:
         src_file = src
@@ -180,7 +183,7 @@ def load_image( src, force ):
     if src.startswith( 's3://' ):
         os.remove( src_file )
         os.removedirs( dest_dir )
-        
+
 
 def parse_image_load_result( result ):
     layers = []
@@ -208,6 +211,7 @@ def remove_images( args ):
 
 def parse_args():
     parser = argparse.ArgumentParser( description = "docker tools")
+    parser.add_argument( "-c", "--config", help = "the .s3cfg configuration file" )
     subparsers = parser.add_subparsers( help = "docker tools" )
     save_parser = subparsers.add_parser( "save", help = "save save images")
     save_parser.add_argument( "-P", "--public", help = "share the image", action = "store_true" )
