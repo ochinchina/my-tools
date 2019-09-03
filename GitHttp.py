@@ -19,8 +19,8 @@ class GitHttp:
         os.chdir( self.directory )
         if git and not self.__is_git():
             print subprocess.check_output( ['git', 'init'] )
-            subprocess.check_output( ['git', 'config', '--local', 'user.email', 'test@example.com'])
-            subprocess.check_output( ['git', 'config', '--local', 'user.name', 'test'] )
+        subprocess.check_output( ['git', 'config', '--local', 'user.email', 'test@example.com'])
+        subprocess.check_output( ['git', 'config', '--local', 'user.name', 'test'] )
 
 
     def list( self):
