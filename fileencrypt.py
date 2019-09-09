@@ -27,7 +27,7 @@ class AESFileEncryptor:
 
         iv = self.create_init_vector()
         aes = self._create_aes( iv )
-        tmp_filename = self._create_temp_file() if out_file is None else out_file
+        tmp_filename = self._create_temp_file() if out_file is None or os.path.abspath( filename ) == os.path.abspath( out_file ) else out_file
         size = os.path.getsize( filename )
         with open( tmp_filename, "wb" ) as fout:
             # write magic
@@ -43,7 +43,7 @@ class AESFileEncryptor:
                     if len(data) == 0: break
                     data = self.encrypt_data( iv, data )
                     fout.write( data )
-        if out_file is None:
+        if out_file is None or os.path.abspath( filename ) == os.path.abspath( out_file ):
             os.rename( tmp_filename, filename )
         return True
 
