@@ -53,6 +53,13 @@ class Pod:
         if 'containerStatuses' in pod_info['status']:
             for status_info in pod_info['status']['containerStatuses']:
                 containers_info[ status_info['name'] ]['status'] = status_info
+        initContainers = pod_info['spec']['initContainers'] if 'initContainers' in pod_info['spec'] else []
+        for info in initContainers:
+            containers_info[ info['name'] ] = {'container': info }
+        if 'initContainerStatuses' in pod_info['status']:
+            for status_info in pod_info['status']['initContainerStatuses']:
+                containers_info[ status_info['name'] ]['status'] = status_info
+
 
         for name in containers_info:
             self.containers.append( Container( containers_info[name][ 'container' ], containers_info[name]['status'] if 'status' in containers_info[name] else None ) )
