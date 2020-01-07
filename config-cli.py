@@ -79,8 +79,7 @@ def cat_file( args ):
     temp_dir = tempfile.mkdtemp()
     file_name = download_file( url, args.file, temp_dir, True, True )
     with open( file_name ) as fp: sys.stdout.write( fp.read() )
-    os.remove( file_name )
-    os.rmdir( temp_dir )
+    shutil.rmtree( temp_dir )
 
 def add_files( args ):
     """
@@ -189,7 +188,6 @@ def edit_file( args ):
                 else:
                     r = requests.post( "%s/upload?file=%s" % (url, args.file ), data = data )
                     print r.content
-                    commit( url )
         os.remove( fp.name )
 
 def create_branch( args ):
@@ -211,8 +209,12 @@ def list_branch( args ):
 
 def delete_file( args ):
     url = find_config_server_url( args )
-    r = requests.put( "%s/delete?file=%s" % (url, args.file), stream = True )
-    return r.content
+    try:
+        r = requests.put( "%s/delete?file=%s" % (url, args.file), stream = True )
+        r.raise_for_status()
+        return r.content
+    except Exception as ex:
+        print ex
 
 def switch_branch( args ):
     url = find_config_server_url( args )
@@ -282,8 +284,6 @@ def restore_config( args ):
     if os.path.isfile( args.filename ):
         os.system( "rm -rf {}".format( tmp_dir ) )
 
-    commit( url )
-
 def make_tag( args ):
     """
     make tag
@@ -316,20 +316,7 @@ def commit( url ):
     print r.content
 
 def find_config_server_url( args ):
-    if args.url:
-        return args.url
-    try:
-        out = subprocess.check_output(['kubectl', 'describe', 'service', 'config-server'] )
-        for line in out.split( "\n" ):
-            if line.startswith( "IP:"):
-                ip = line[3:].strip()
-            elif line.startswith( "Port:"):
-                port = line.split()[-1].split( "/")[0]
-        return "http://%s:%s" % ( ip, port )
-    except Exception as ex:
-        print ex
-        print "Please check if VNLS config server is started or set --url parameter"
-        sys.exit(1)
+    return args.url
 
 def load_args():
     parser = argparse.ArgumentParser( description="edit the configuration file" )
