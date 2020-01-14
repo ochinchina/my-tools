@@ -24,7 +24,7 @@ class GitRemoteRepo:
                 out = subprocess.check_output( ['git', 'remote', 'add', name, url ] )
                 logger.info( "succeed to add remote git repository %s:%s" % ( url, out ) )
             except Exception as ex:
-                logger.error( "fail to add remote git repository %s" % url, ex )
+                logger.error( "fail to add remote git repository %s with error:%s" % (url, ex ) )
 
     def remove_remote( self, name ):
         """
@@ -34,7 +34,7 @@ class GitRemoteRepo:
             out = subprocess.check_output( ['git', 'remote', 'remove', name ] )
             logger.info( "succeed to remote the remote repository %s" % name )
         except Exception as ex:
-            logger.error( "fail to remove the git repository %s" % name, ex )
+            logger.error( "fail to remove the git repository %s with error:%s" % (name, ex ) )
 
     def remove_remote_url( self, url ):
         """
@@ -53,7 +53,7 @@ class GitRemoteRepo:
             for name in remote_names:
                 self.remove_remote( name )
         except Exception as ex:
-            logger.error( "fail to remove all the remote repositories", ex )
+            logger.error( "fail to remove all the remote repositories with error:%s" % ex )
 
     def get_all_remote_url( self ):
         """
@@ -69,7 +69,7 @@ class GitRemoteRepo:
         """
         remotes = self.list_remote()
         for remote in remotes:
-            if remote == url:
+            if remote[1] == url:
                 return True
         return False
 
@@ -87,10 +87,13 @@ class GitRemoteRepo:
             url - the url of remote repository
         """
         try:
-            out = subprocess.check_output( ['git', 'pull', name, branch ] )
+            out = subprocess.check_output( ['git', 'fetch', name ] )
+            logger.info( "output of fetch from %s" % name )
+            out = subprocess.check_output( ['git', 'reset', '--hard', '%s/%s' % ( name, branch) ] )
+            logger.info( "reset the head to %s/%s" % ( name, branch) )
             logger.info( "succeed to sync remote git repository %s:%s" % ( url, out ) )
         except Exception as ex:
-            logger.error( "fail to add remote git repository %s" % url, ex )
+            logger.error( "fail to add remote git repository %s with error:%s" % (url, ex ) )
 
     def _create_remote_repo_name( self):
         remote_names = self.get_all_remote_repo_name()
@@ -108,12 +111,12 @@ class GitRemoteRepo:
     def list_remote( self ):
         remotes = []
         try:
-            for line in subprcess.check_output( ['git', 'remote', '-v'] ).split("\n" ):
+            for line in subprocess.check_output( ['git', 'remote', '-v'] ).split("\n" ):
                 fields = line.split()
                 if len( fields ) > 0:
                     remotes.append( fields )
         except Exception as ex:
-            logger.error( "fail to list remote git repositories", ex )
+            logger.error( "fail to list remote git repositories with error:%s" % ex )
 
         return remotes
 
@@ -145,6 +148,7 @@ def init_logger( log_file ):
 def main():
     args = parse_args()
     init_logger( args.log_file )
+
     git_repo = GitRemoteRepo( args.git_dir )
     while True:
         remote_repos = get_remote_repositories( args.remote_repo_script )
