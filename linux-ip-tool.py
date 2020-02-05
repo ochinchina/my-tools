@@ -4,6 +4,8 @@ import argparse
 import subprocess
 import json
 import re
+import ipaddress
+import os
 
 def list_all_ips():
     """
@@ -21,17 +23,18 @@ def list_all_ips():
             dev_name = words[1][0:-1]
             result[dev_name] = {}
         else:
+            line = line.strip()
             words = line.split()
             if len(words) > 2 and words[0] == 'inet':
                 ipv4 = words[1]
                 if 'ipv4' not in result[dev_name]:
                     result[dev_name]['ipv4'] = []
-                    result[dev_name]['ipv4'].append( ipv4 )
+                result[dev_name]['ipv4'].append( ipv4 )
             elif len(words) > 2 and words[0] == 'inet6':
                 ipv6 = words[1]
                 if 'ipv6' not in result[dev_name]:
                     result[dev_name]['ipv6'] = []
-                    result[dev_name]['ipv6'].append( ipv6 )
+                result[dev_name]['ipv6'].append( ipv6 )
     return result
 
 def print_all_ips( args ):
@@ -71,6 +74,25 @@ def get_ip_addr( args ):
     elif len( ip_addrs ) > 0:
         print ip_addrs[0]
 
+def is_same_ip( ip1, ip2 ):
+    try:
+        return ipaddress.ip_address( unicode( ip1 ) ) == ipaddress.ip_address( unicode( ip2 ) )
+    except Exception as ex:
+        print ex
+        return False
+
+def del_ip( args ):
+    all_ips = list_all_ips()
+    for  ip in args.ip:
+        for dev in all_ips:
+            for ip_type in all_ips[dev]:
+                for item in all_ips[dev][ip_type]:
+                    fields = item.split( '/' )
+                    if len( fields ) == 2 and is_same_ip( ip, fields[0] ):
+                        command = "ip a del %s dev %s" % ( item, dev )
+                        print command
+                        os.system( command )
+
 def parse_args():
     parser = argparse.ArgumentParser( description = "linux ip tools" )
     subparsers = parser.add_subparsers( help = "linux ip tools" )
@@ -85,6 +107,9 @@ def parse_args():
     get_ip_by_dev_parser.add_argument( "--all", help = "all the ip address in json array", action = "store_true", required = False )
     get_ip_by_dev_parser.set_defaults( func = get_ip_addr )
 
+    del_ip_parser = subparsers.add_parser( "del", help = "delete ip address" )
+    del_ip_parser.add_argument( "ip", nargs = "+", help = "ip address to be deleted" )
+    del_ip_parser.set_defaults( func = del_ip )
     return parser.parse_args()
 
 def main():
@@ -94,5 +119,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
