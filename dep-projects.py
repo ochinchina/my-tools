@@ -3,6 +3,7 @@
 import argparse
 import json
 import os
+import subprocess
 
 """
 this script is used to manage the dependency of projects
@@ -21,7 +22,7 @@ this script will accept two configuration files:
           "postCommands": [
              {
                  "name": "copy scripts",
-                 "command": "cp -r nls-common $PARENT_PROJ_DIR/java"
+                 "command": "cp -r nls-common /java"
              },
              {
                  "name": "compile the system",
@@ -39,6 +40,90 @@ TEST_PROJECT      df40b0a645dc1b0efe07e3e337bfa95db5bb3e18
 
 """
 
+class Git:
+    def __init__( self, path ):
+        self.path = path
+        self.cur_dir = os.getcwd()
+        if not os.path.exists( self.path ):
+            os.path.makedirs( self.path )
+
+    def __enter__( self ):
+        os.chdir( self.path )
+        return self
+
+    def __exit__( self, exc_type, exc_value, traceback ):
+        os.chdir( self.cur_dir )
+
+    def clone( self, proj ):
+        return self._clone_by_nls_git( proj ) or self._clone_by_git( proj ) if self.exist_nls_git() else self._clone_by_git( proj ) or self._clone_by_nls_git( proj )
+
+    def _clone_by_git( self, proj ):
+        command = 'git clone ssh://gerrit.ext.net.nokia.com:29418/GSD_SI/SwS/NLS/%s && scp -p -P 29418 gerrit.ext.net.nokia.com:hooks/commit-msg %s/.git/hooks/' % ( proj, proj )
+        return os.system( command ) == 0
+
+    def _clone_by_nls_git( self, proj ):
+        return os.system( 'nls-git.py clone %s' % proj ) == 0
+
+
+    def fetch_tags( self ):
+        return self._fetch_tags_by_nls_git() or self._fetch_tags_by_git() if self.exist_nls_git() else self._fetch_tags_by_git() or self._fetch_tags_by_nls_git()
+
+    def get_commit_id( self, tag ):
+        try:
+            return subprocess.check_output( ['git', 'rev-list', '-n', '1', tag] ).strip()
+        except Exception as ex:
+            print ex
+            return None
+
+    def get_head( self ):
+        try:
+            return subprocess.check_output( ['git', 'rev-parse', 'HEAD'] ).strip()
+        except Exception as ex:
+            print ex
+            return None
+
+    def checkout( self, tag ):
+        commitid = self.get_commit_id( tag )
+        if commitid is None or len( commitid ) <= 0:
+            self.fetch_tags()
+            commitid = self.get_commit_id( tag )
+
+        if commitid is None or len( commitid ) <= 0:
+           print "Not exist tag %s" % tag
+           return False
+        elif self.get_head() == commitid:
+           print "%s is already checked out" % commitid
+           return True
+        else:
+            print "try to checkout %s" % commitid
+            os.system( "git checkout %s" % commitid )
+            return self.get_head() == commitid
+
+    def pull( self ):
+        return self._pull_by_nls_git() or self._pull_by_git() if self.exist_nls_git() else self._pull_by_git() or self._pull_by_nls_git()
+
+    def _fetch_tags_by_git( self ):
+        return os.system( 'git fetch --tags' ) == 0
+
+
+    def _fetch_tags_by_nls_git( self ):
+        return os.system( 'nls-git.py fetch --tags' ) == 0
+
+    def _pull_by_git( self ):
+        return os.system( 'git pull --rebase' ) == 0
+
+    def _pull_by_nls_git( self ):
+        return os.system( 'nls-git.py pull --rebase' ) == 0
+
+    def exist_nls_git( self ):
+        return self.which( 'nls-git.py' ) is not None
+
+    def which( self, command ):
+        try:
+            return subprocess.check_output( ['which', command] ).strip()
+        except Exception as ex:
+            return None
+
 class Project:
     def __init__( self, proj_config, parent_dir ):
         self.proj_config = proj_config
@@ -47,37 +132,31 @@ class Project:
     def get_name( self ):
         return self.proj_config[ 'name' ]
 
-    def get_repo( self ):
-        return self.proj_config['repo']
-
     def get_dir( self ):
         return os.path.join( self.parent_dir, self.get_name() )
 
-    def get_git_command( self ):
-        return self.proj_config['git'] if 'git' in self.proj_config else 'git'
-
     def checkout( self, tag ):
-        os.chdir( self.get_dir() )
-        os.system( "git checkout %s" % tag )
+        with Git( self.get_dir() ) as git:
+            return git.checkout( tag )
 
     def clone( self ):
         """
         clone the project if it is not cloned
         """
         if not os.path.exists( self.get_dir() ):
-            os.chdir( self.parent_dir )
-            os.system( "%s clone %s" % ( self.get_git_command(), self.get_repo() ) )
+            with Git( self.parent_dir ) as git:
+                git.clone( self.get_name() )
 
     def pull( self ):
-        os.chdir( self.get_dir() )
-        os.system( "%s pull --rebase" % self.get_git_command() )
+        with Git( self.get_dir() ) as git:
+            git.pull()
 
     def execute_post_commands( self ):
         if 'postCommands' in self.proj_config:
             for postCmd in self.proj_config['postCommands']:
                 print postCmd['name']
-                os.chdir( self.get_dir() )
-                os.system( postCmd['command'] )
+                with Git( self.get_dir() ) as git:
+                    os.system( postCmd['command'] )
 
 
 
@@ -131,7 +210,7 @@ def load_project_dep_version( dep_version_file ):
     return proj_version
 
 def parse_args():
-    parser = argparse.ArgumentParser( description = "checkout dependency projects" )
+    parser = argparse.ArgumentParser( description = "dependency projects management" )
     parser.add_argument( "--dep-projects", help = "the dependency projects configuration in .json format, default is dep-projects.json", default = "dep-projects.json", required = False)
     parser.add_argument( "--dep-version", help = "the dependency project version, default is dep-proj-version", default = "dep-proj-version.conf" )
     subparsers = parser.add_subparsers( help = "sub commands" )
@@ -173,8 +252,13 @@ def checkout_projects( args ):
             break
         proj.clone()
         if proj.get_name() in dep_proj_version:
-            proj.checkout( dep_proj_version[ proj.get_name() ] )
-            proj.execute_post_commands()
+            succeed_checkout = False
+            if proj.checkout( dep_proj_version[ proj.get_name() ] ):
+                succeed_checkout = True
+            else:
+                proj.pull()
+                succeed_checkout = proj.checkout( dep_proj_version[ proj.get_name() ] )
+            if succeed_checkout: proj.execute_post_commands()
 
 def main():
     args = parse_args()
