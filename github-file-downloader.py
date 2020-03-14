@@ -1,12 +1,19 @@
 #!/usr/bin/python
 
 import os
-import urllib2
 import shutil
 from bs4 import BeautifulSoup
 import sys
-from urlparse import urlparse
 import argparse
+try:
+    import urllib2
+    import urlparse
+    urlopen = urllib2.urlopen
+    urlparse = urlparse.urlparse
+except:
+    import urllib.request, urllib.error, urllib.parse
+    urlopen = urllib.request.urlopen
+    urlparse = urllib.parse.urlparse
 
 """
 this tool directly download files from the github under a specific directory
@@ -27,7 +34,7 @@ class GithubFileDownlder:
         Returns:
             contents of the url in string
         """
-        return urllib2.urlopen( url ).read()
+        return urlopen( url ).read()
 
 
     def parse_folder( self, url ):
@@ -59,10 +66,10 @@ class GithubFileDownlder:
             the url
         """
         raw_file_url = self.get_raw_file_url( url )
-        f = urllib2.urlopen( raw_file_url )
+        f = urlopen( raw_file_url )
         output_filename = self.get_output_file( url )
         output_dirname = os.path.dirname( output_filename )
-        print "save to %s" % output_filename
+        print( "save to %s" % output_filename )
         if not os.path.exists( output_dirname ):
             os.makedirs( output_dirname )
         with open( output_filename, "wb" ) as fp:
@@ -116,7 +123,7 @@ class GithubFileDownlder:
         """
         path = self.get_url_path( url )
         path = [ p for p in path.split('/') if len( p ) > 0 ]
-        return len( path ) > 0 and path[2] == 'tree'
+        return len( path ) <= 2 or path[2] == 'tree'
 
     def is_raw_file( self, url ):
         r = urlparse( url )
