@@ -20,6 +20,14 @@ logger = logging.getLogger( "git-http" )
 def to_boolean( s ):
     return s.lower() in ( "yes", "y", "t", "true", "1" )
 
+def check_output( command ):
+    try:
+        return subprocess.check_output( command )
+    except subprocess.CalledProcessError as e:
+        return e.output
+    except Exception as ex:
+        return "%s" % ex
+
 class Git:
     def __init__( self, enable_git, directory ):
         self.enable_git = enable_git
@@ -43,7 +51,7 @@ class Git:
 
     def fix_index_corrupt( self ):
         try:
-            subprocess.check_output( ["git", "status", "-s"])
+            check_output( ["git", "status", "-s"])
         except subprocess.CalledProcessError as ex:
             if ex.returncode == 128:
                 logger.info( ".git/index file is corrupted, try to fix it")
@@ -57,43 +65,43 @@ class Git:
     def _reset_index( self ):
         try:
             os.remove( ".git/index" )
-            subprocess.check_output( ["git", "reset", "HEAD", "."] )
+            check_output( ["git", "reset", "HEAD", "."] )
         except Exception as ex:
             logger.error( "%s", ex )
     def _init_git( self ):
-        return subprocess.check_output( ['git', 'init'] )
+        return check_output( ['git', 'init'] )
 
     def set_user_email( self, email ):
         if os.system( "git config --get user.email" ) != 0:
             logger.info( "set the git user.email" )
-            subprocess.check_output( ['git', 'config', '--local', 'user.email', email ] )
+            check_output( ['git', 'config', '--local', 'user.email', email ] )
 
     def set_user_name( self, name ):
         if os.system( "git config --get user.name" ) != 0:
             logger.info( "set the git user.name" )
-            subprocess.check_output( ['git', 'config', '--local', 'user.name', name] )
+            check_output( ['git', 'config', '--local', 'user.name', name] )
 
     def add( self, filename ):
         self.fix_index_corrupt()
-        return subprocess.check_output( ["git", "add", filename ] )
+        return check_output( ["git", "add", filename ] )
 
     def remove( self, filename ):
         logger.info( "try to remove file %s" % filename )
         self.fix_index_corrupt()
-        return subprocess.check_output( ['git', 'rm', filename ] )
+        return check_output( ['git', 'rm', filename ] )
 
     def log( self ):
         self.fix_index_corrupt()
-        return subprocess.check_output( ["git", "log" ] )
+        return check_output( ["git", "log" ] )
 
     def status( self ):
         self.fix_index_corrupt()
-        return subprocess.check_output( ['git', 'status'])
+        return check_output( ['git', 'status'])
 
     def add_modified_files( self ):
         self.fix_index_corrupt()
         n = 0
-        for line in subprocess.check_output( ['git', 'status', '-s'] ).split("\n"):
+        for line in check_output( ['git', 'status', '-s'] ).split("\n"):
             fields = line.split()
             if len( fields ) > 0 and fields[0] in ('M', 'UU'):
                 filename = " ".join( fields[1:] )
@@ -113,17 +121,17 @@ class Git:
 
         self.add_modified_files()
         logger.info( "commit the files with message:%s" % msg )
-        return subprocess.check_output( ['git', 'commit', '-m', msg ] )
+        return check_output( ['git', 'commit', '-m', msg ] )
 
     def has_uncommited_files( self ):
         self.fix_index_corrupt()
-        out = subprocess.check_output( ['git', "diff", "--cached"] ).strip()
+        out = check_output( ['git', "diff", "--cached"] ).strip()
         return len( out ) > 0
 
     def get_branches( self ):
         self.fix_index_corrupt()
         branches = []
-        for line in subprocess.check_output( ['git', 'branch', '--no-color']).split("\n"):
+        for line in check_output( ['git', 'branch', '--no-color']).split("\n"):
             fields = line.split()
             if len( fields ) == 1:
                 branches.append( fields[0] )
@@ -147,46 +155,46 @@ class Git:
             all branches in the git repository in json
         """
         self.fix_index_corrupt()
-        return subprocess.check_output( ["git", "branch" ] )
+        return check_output( ["git", "branch" ] )
 
     def checkout( self, branch, parent = None ):
         self.fix_index_corrupt()
         if branch in self.get_branches():
-            return subprocess.check_output(['git', 'checkout', branch ] )
+            return check_output(['git', 'checkout', branch ] )
         if parent is not None:
             logger.info( "create branch %s from %s" % (branch, parent) )
-            return subprocess.check_output(['git', 'checkout', '-b', branch, parent ] )
+            return check_output(['git', 'checkout', '-b', branch, parent ] )
         else:
             logger.info( "create branch %s" % branch )
-            return subprocess.check_output(['git', 'checkout', '-b', branch ] )
+            return check_output(['git', 'checkout', '-b', branch ] )
 
     def make_tag( self, tag, message = None ):
         self.fix_index_corrupt()
         if message is not None:
-            return subprocess.check_output( ['git', 'tag', tag, '-m', message ] )
+            return check_output( ['git', 'tag', tag, '-m', message ] )
         else:
-            return subprocess.check_output( ['git', 'tag', tag ] )
+            return check_output( ['git', 'tag', tag ] )
 
     def switch_tag( self, tag, branch = None ):
         self.fix_index_corrupt()
         if branch is not None:
-            return subprocess.check_output( ['git', 'checkout', 'tags/%s' % tag, '-b', branch ] )
+            return check_output( ['git', 'checkout', 'tags/%s' % tag, '-b', branch ] )
         else:
-            return subprocess.check_output( ['git', 'checkout', 'tags/%s' % tag ] )
+            return check_output( ['git', 'checkout', 'tags/%s' % tag ] )
 
     def list_tag( self ):
         """
         list all the tags
         """
         self.fix_index_corrupt()
-        return subprocess.check_output( ['git', 'tag'] )
+        return check_output( ['git', 'tag'] )
 
     def in_repository( self, filename ):
         """
         check if the file is in the git repository or not
         """
         self.fix_index_corrupt()
-        return len( subprocess.check_output( ['git', 'log', filename] ) ) > 0
+        return len( check_output( ['git', 'log', filename] ) ) > 0
 
     def git_filename( self, filename ):
         return filename[len( self.directory )+ 1: ] if filename.startswith( self.directory ) else None
@@ -295,6 +303,7 @@ class GitHttp:
 
             return "save file successfully"
         except Exception as ex:
+            logger.error( "fail to upload file with error %s" % ex )
             return "Fail to save file", 500
 
     def delete( self ):
@@ -335,7 +344,7 @@ class GitHttp:
 
 
         if 'label' in request.args and self.git.in_git():
-            return subprocess.check_output( ['git', 'show', '%s:%s' % (request.args['label'], request.args['file'] ) ] ),
+            return check_output( ['git', 'show', '%s:%s' % (request.args['label'], request.args['file'] ) ] ),
 
         filename = os.path.abspath( "%s/%s" % (self.directory, request.args['file'] ))
 
