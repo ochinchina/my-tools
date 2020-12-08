@@ -14,27 +14,27 @@ def no_color( text ):
     return text
 
 def find_files( path ):
-    files = []
-    os.path.walk( path, lambda arg, dirname, names: files.extend( [ os.path.join( dirname, name ) for name in names ] ), None )
-    return filter( lambda filename: os.path.isfile( filename ), files )
-    #return files
+    result = []
+    for root, dirs, files in os.walk( path ):
+        result.extend( [ os.path.join( root, name ) for name in files ] )
+    return list(filter( lambda filename: os.path.isfile( filename ), result ) )
 
 def sort_files_by_name( files, reverse = False ):
-    return sorted( files, reverse = reverse )
+    return list( sorted( files, reverse = reverse ) )
 
 
 def sort_files_by_date( files, reverse = False ):
     files_with_modified_time = []
     for filename in files:
         files_with_modified_time.append( (  filename, os.path.getmtime( filename ) ) )
-    files_with_modified_time = sorted( files_with_modified_time, key = lambda x: x[1], reverse = reverse )
-    return map( lambda x: x[0], files_with_modified_time )
+    files_with_modified_time = list( sorted( files_with_modified_time, key = lambda x: x[1], reverse = reverse ) )
+    return list( map( lambda x: x[0], files_with_modified_time ) )
 
 def sort_files_by_size( files, reverse = False ):
     files_with_size = []
     for filename in files:
         files_with_size.append( ( filename, os.path.getsize( filename ) ) )
-    return map( lambda x: x[0], sorted( files_with_size, key = lambda x: x[1], reverse = reverse  ) )
+    return list( map( lambda x: x[0], sorted( files_with_size, key = lambda x: x[1], reverse = reverse  ) ) )
 
 def no_sort( files, reverse = False ):
     return files
@@ -64,16 +64,16 @@ def print_files( files, with_color = False ):
             else:
                 color_func = no_color
 
-            text = subprocess.check_output( [ "ls", "-l", filename] ).strip().split()
+            text = subprocess.check_output( [ "ls", "-l", filename] ).decode().strip().split()
             text[4] = size_format % text[4]
             text = " ".join( text )
 
             if with_color:
-                print color_func( text )
+                print( color_func( text ) )
             else:
-                print text
+                print( text )
         except Exception as ex:
-            print ex
+            print( ex )
 
 def parse_args():
     parser = argparse.ArgumentParser( description = "find files under directory" )
@@ -117,4 +117,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
