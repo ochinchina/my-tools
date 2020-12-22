@@ -6,14 +6,11 @@ from bs4 import BeautifulSoup
 import sys
 import argparse
 try:
-    import urllib2
-    import urlparse
-    urlopen = urllib2.urlopen
-    urlparse = urlparse.urlparse
+    from urllib2 import urlopen
+    from urlparse import urlparse
 except:
-    import urllib.request, urllib.error, urllib.parse
-    urlopen = urllib.request.urlopen
-    urlparse = urllib.parse.urlparse
+    from urllib.request import urlopen
+    from urllib.parse import urlparse
 
 """
 this tool directly download files from the github under a specific directory
@@ -50,8 +47,11 @@ class GithubFileDownlder:
         data = self.read_file( url )
         soup = BeautifulSoup( data, "html.parser" )
         result = []
-        for td in soup.find_all( "td", class_="content" ):
-            for a in td.find_all( "a" ): result.append( a['href'] )
+        url_path = self.get_url_path( url )
+        for a in soup.find_all( "a" ):
+            href = a['href']
+            if href.startswith( url_path ) or href.replace('/blob/','/tree/').startswith( url_path ):
+                result.append( href )
         return result
 
 
@@ -127,7 +127,9 @@ class GithubFileDownlder:
 
     def is_raw_file( self, url ):
         r = urlparse( url )
-        return r.hostname == "raw.githubusercontent.com"
+        url_path = self.get_url_path( r.path )
+        url_paths = url_path.split('/')
+        return len( url_paths ) > 3 and url_paths[2] == 'blob'
 
     def download( self ):
         """
@@ -138,6 +140,7 @@ class GithubFileDownlder:
         while len( urls ) > 0:
             url = urls.pop()
             if self.is_raw_file( url ):
+                print( "is raw {}".format( url ) )
                 self.download_raw_file( url )
             elif self.is_folder( url ):
                 for f in self.parse_folder( url ):
