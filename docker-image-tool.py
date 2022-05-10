@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 
 import argparse
 import os
@@ -92,14 +92,14 @@ def save_image( image, dest, public, config = None ):
         os.makedirs( dest_dir )
 
     filename = '%s/%s-%s.tar' % ( dest_dir, tmp[0], tmp[1] if len( tmp ) == 2 else 'latest' )
-    print "try to save image %s to file %s" % (image, filename )
+    print( "try to save image %s to file %s" % (image, filename ) )
     os.system( "docker save -o %s %s" % ( filename, image ) )
-    print "compress file %s" % filename
+    print( "compress file %s" % filename )
     os.system( "gzip %s" % filename )
     filename = "%s.gz" % filename
     if dest.startswith( 's3://' ):
         command = "s3cmd -c %s put %s %s %s" % ( config or get_s3_cfg(), filename, "-P" if public else "", dest )
-        print command
+        print( command )
         os.system( command )
         os.remove( filename )
         os.removedirs( dest_dir )
@@ -189,7 +189,7 @@ def parse_image_load_result( result ):
     layers = []
     image = ""
     for line in result.split( "\n" ):
-        print line
+        print( line )
         pos = line.find( ": Loading layer" )
         if pos != -1:
             layers.append( line[0:pos] )
@@ -237,3 +237,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
