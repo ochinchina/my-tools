@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 
 import argparse
 import json
@@ -124,7 +124,7 @@ def get_pod( args ):
         else:
             x.add_row( [pod.get_name(), pod.get_pod_ip(), pod.get_node_name(), pod.get_host_ip(), colorful_status( pod.get_status() ) ] )
 
-    print x
+    print( x )
 
 def get_logs( args ):
     os.system( "kubectl logs %s -c %s -n %s" % ( args.pod_name, args.c, args.namespace ) )
