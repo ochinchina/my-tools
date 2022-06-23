@@ -1,12 +1,10 @@
 """
-migrate the maven repository from one repository to another repository
+migrate the maven libraries from one repository to another based on the maven plugin deploy:deploy-file
 
 This script requires following python3 modules:
 - requests
 - bs4
 - lxml
-
-And it requires maven and its plugin deploy:deploy-file
 
 """
 import argparse
@@ -178,6 +176,8 @@ class MavenLibBrowser:
     @classmethod
     def _get_lib_files(cls, url):
         result = []
+        packagings = [".jar", ".war", ".pom", ".zip"]
+
         try:
             resp = requests.get(url)
             soup = BeautifulSoup(resp.text, "lxml")
@@ -185,8 +185,9 @@ class MavenLibBrowser:
             files = cls._extract_files(url, soup)
             for f in files:
                 text = f['text']
-                if text.endswith(".jar") or text.endswith('.war') or text.endswith('.pom'):
-                    result.append(f)
+                for name in packagings:
+                    if text.endswith(name):
+                        result.append(f)
         except Exception as ex:
             logger.error("fail to get lib files from {} with error:{}".format(url, ex))
 
@@ -247,31 +248,9 @@ class Maven:
         :param files:
         :return:
         """
-        java_doc_file = None
-        source_file = None
-        pom_file = None
-        packaging = "jar"
-        package_file = None
-        groupId = None
-        artifactId = None
-        version = None
 
-        for filename in files:
-            if filename.endswith(".pom"):
-                pom_file = filename
-                groupId, artifactId, version = self._parse_pom(filename)
-            elif filename.endswith("-sources.jar"):
-                source_file = filename
-            elif filename.endswith(".jar"):
-                packaging = "jar"
-                package_file = filename
-            elif filename.endswith(".war"):
-                packaging = "war"
-                package_file = filename
-            elif filename.endswith("-javadoc.jar"):
-                java_doc_file = filename
-        if groupId is None or artifactId is None or version is None or package_file is None or pom_file is None:
-            logger.error("not a valid maven deploy directory")
+        groupId, artifactId, version, packaging, pom_file, package_file, source_file, java_doc_file = self._create_deploy_params(files)
+        if groupId is None:
             return
 
         command = ["mvn",
@@ -282,6 +261,7 @@ class Maven:
                    "-DartifactId={}".format(artifactId),
                    "-Dversion={}".format(version),
                    "-Dfile={}".format(package_file),
+                   "-DpomFile={}".format(pom_file),
                    "-Dpackaging={}".format(packaging),
                    "--settings", "settings.xml"]
         if source_file is not None:
@@ -298,10 +278,98 @@ class Maven:
             logger.error("fail to run command {} with error:{}".format(" ".join(command), ex))
 
     @classmethod
+    def _create_deploy_params(cls, files):
+        java_doc_file = None
+        source_file = None
+        pom_file = None
+        packaging = "jar"
+        package_file = None
+        groupId = None
+        artifactId = None
+        version = None
+        packaging_map = {
+            "jar": ".jar",
+            "war": ".war",
+            "zip": ".zip"
+        }
+
+        for filename in files:
+            if filename.endswith(".pom"):
+                pom_file = filename
+                groupId, artifactId, version = cls._parse_pom(filename)
+            elif filename.endswith("-sources.jar"):
+                source_file = filename
+            elif filename.endswith("-javadoc.jar"):
+                java_doc_file = filename
+            for name in packaging_map:
+                if filename.endswith(packaging_map[name]):
+                    packaging = name
+                    package_file = filename
+                    break
+        if groupId is None or artifactId is None or version is None or package_file is None or pom_file is None:
+            logger.error("not a valid maven deploy directory with groupId={},artifactId={},version={},package_file={}"
+                         ",pom_file={},packaging={}".format(groupId,
+                                                            artifactId,
+                                                            version,
+                                                            package_file,
+                                                            pom_file,
+                                                            packaging))
+            return None, None, None, None, None, None, None, None
+        return groupId, artifactId, version, packaging, pom_file, package_file, source_file, java_doc_file
+
+    @classmethod
     def _parse_pom(cls, pom_file):
         with open(pom_file) as fp:
             soup = BeautifulSoup(fp.read(), "xml")
             return soup.find("groupId").get_text(), soup.find("artifactId").get_text(), soup.find("version").get_text()
+
+
+class MavenLibMigrate:
+    def __init__(self, config):
+        self._config = config
+
+    def _create_from_lib_browser(self):
+        from_config = self._config['from']
+
+        return MavenLibBrowser(from_config['url'], from_config['groupId'])
+
+    def _create_to_lib_browser(self):
+        to_config = self._config['to']
+        return MavenLibBrowser(to_config['url'], to_config['groupId'])
+
+    def _create_maven_settings(self):
+        to_config = self._config['to']
+        maven_settings = MavenSettings("settings.xml")
+        repoId, user, password = to_config['repoId'], to_config['user'], to_config['password']
+        maven_settings.add_repo_id(repoId, user, password)
+        maven_settings.create()
+
+    def _create_maven(self):
+        to_config = self._config['to']
+        return Maven(to_config['url'])
+
+    def migrate(self):
+        maven = self._create_maven()
+        self._create_maven_settings()
+
+        from_lib_browser = self._create_from_lib_browser()
+        to_lib_browser = self._create_to_lib_browser()
+
+        from_lib_versions = from_lib_browser.get_all_libraries()
+        to_lib_versions = to_lib_browser.get_all_libraries()
+
+        for groupId in from_lib_versions.get_groups():
+            for artifactId in from_lib_versions.get_artifacts(groupId):
+                for version in from_lib_versions.get_versions(groupId, artifactId):
+                    lib = "{}:{}:{}".format(groupId, artifactId, version['version'])
+                    if to_lib_versions.exist_version(groupId, artifactId, version['version']):
+                        logger.info("don't migrate {} because it exists already".format(lib))
+                    else:
+                        logger.info("start to migrate {}".format(lib))
+                        files = from_lib_browser.download_lib_files(version['url'])
+                        if len(files) > 0:
+                            maven.deploy(files)
+                            shutil.rmtree(os.path.dirname(files[0]))
 
 
 def init_logger(log_file):
@@ -319,19 +387,19 @@ def load_config(config_file):
     """
     load the configuration from the file
     :param config_file: the file name. The file content looks like:
-    {
+    [{
         "from": {
             "url": "archiva url",
             "groupId": "example.com"
         },
         "to": {
-            "url": "the jfrog url",
-            "user": "the jfrog user",
-            "password": "the jfrog password",
-            "repoId": "the jfrog repository id",
+            "url": "the url",
+            "user": "the user",
+            "password": "the password",
+            "repoId": "the repository id",
             "groupId": "example.com"
         }
-    }
+    }]
     :return: the configuration in dict
     """
     with open(config_file) as fp:
@@ -349,35 +417,11 @@ def main():
     args = parse_args()
     init_logger(args.log_file)
     config = load_config(args.config)
-    from_config = config['from']
-
-    from_lib_browser = MavenLibBrowser(from_config['url'], from_config['groupId'])
-
-    to_config = config['to']
-    maven = Maven(to_config['url'])
-
-    maven_settings = MavenSettings("settings.xml")
-    repoId, user, password = to_config['repoId'], to_config['user'], to_config['password']
-    maven_settings.add_repo_id(repoId, user, password)
-    maven_settings.create()
-
-    to_lib_browser = MavenLibBrowser(to_config['url'], to_config['groupId'])
-
-    from_lib_versions = from_lib_browser.get_all_libraries()
-    to_lib_versions = to_lib_browser.get_all_libraries()
-
-    for groupId in from_lib_versions.get_groups():
-        for artifactId in from_lib_versions.get_artifacts(groupId):
-            for version in from_lib_versions.get_versions(groupId, artifactId):
-                lib = "{}:{}:{}".format(groupId, artifactId, version['version'])
-                if to_lib_versions.exist_version(groupId, artifactId, version['version']):
-                    logger.info("don't migrate {} because it exists already".format(lib))
-                else:
-                    logger.info("start to migrate {}".format(lib))
-                    files = from_lib_browser.download_lib_files(version['url'])
-                    if len(files) > 0:
-                        maven.deploy(files)
-                        shutil.rmtree(os.path.dirname(files[0]))
+    if isinstance(config, dict):
+        MavenLibMigrate(config).migrate()
+    elif isinstance(config, list):
+        for item in config:
+            MavenLibMigrate(item).migrate()
 
 
 if __name__ == "__main__":
