@@ -53,6 +53,17 @@ class LibVersionMgr:
         self._versions = {}
 
     def add_versions(self, groupId: str, artifactId: str, versions: List[Dict]):
+        """
+        add versions to the manager
+        :param groupId: the groupId
+        :param artifactId: the artifactId
+        :param versions: the versions is a list like:
+        [
+            {"version": "1.0.0", "url": "http://test.com/com/test/my-lib/1.0.0"},
+            {"version": "1.0.1", "url": "http://test.com/com/test/my-lib/1.0.1"}
+        ]
+        :return:
+        """
         if groupId not in self._versions:
             self._versions[groupId] = {}
         self._versions[groupId][artifactId] = versions
@@ -69,6 +80,11 @@ class LibVersionMgr:
         if artifactId not in self._versions[groupId]:
             return []
         return self._versions[groupId][artifactId]
+
+    def get_version(self, groupId: str, artifactId: str, version: str) -> Dict[str, str]:
+        versions = self.get_versions(groupId, artifactId)
+        r = [item for item in versions if item['version'] == version]
+        return r[0] if len(r) == 1 else {}
 
     def exist_version(self, groupId: str, artifactId: str, version: str) -> bool:
         """
@@ -157,7 +173,7 @@ class MavenLibBrowser:
 
     @classmethod
     def download_lib_files(cls, url):
-        files = cls._get_lib_files(url)
+        files = cls.get_lib_files(url)
         if len(files) == 0:
             return []
 
@@ -174,7 +190,7 @@ class MavenLibBrowser:
         return result
 
     @classmethod
-    def _get_lib_files(cls, url):
+    def get_lib_files(cls, url):
         result = []
         packagings = [".jar", ".war", ".pom", ".zip"]
 
@@ -239,8 +255,9 @@ class MavenLibBrowser:
 
 
 class Maven:
-    def __init__(self, repo_url):
+    def __init__(self, repo_url, repo_id):
         self._repo_url = repo_url
+        self._repo_id = repo_id
 
     def deploy(self, files: List[str]):
         """
@@ -249,21 +266,28 @@ class Maven:
         :return:
         """
 
-        groupId, artifactId, version, packaging, pom_file, package_file, source_file, java_doc_file = self._create_deploy_params(files)
+        groupId, artifactId, version, packaging, pom_file, package_files, source_file, java_doc_file = self._create_deploy_params(
+            files)
         if groupId is None:
             return
 
         command = ["mvn",
                    "deploy:deploy-file",
                    "-Durl={}".format(self._repo_url),
-                   "-DrepositoryId=gradle-nls-local",
+                   "-DrepositoryId={}".format(self._repo_id),
                    "-DgroupId={}".format(groupId),
                    "-DartifactId={}".format(artifactId),
                    "-Dversion={}".format(version),
-                   "-Dfile={}".format(package_file),
                    "-DpomFile={}".format(pom_file),
-                   "-Dpackaging={}".format(packaging),
-                   "--settings", "settings.xml"]
+                   "-Dpackaging={}".format(packaging)]
+
+        if len(package_files) == 1:
+            command.append("-Dfile={}".format(package_files[0]))
+        else:
+            command.append("-Dfiles={}".format(",".join(package_files)))
+
+        command.extend(["--settings", "settings.xml"])
+
         if source_file is not None:
             command.append("-Dsources={}".format(source_file))
         if java_doc_file is not None:
@@ -283,7 +307,7 @@ class Maven:
         source_file = None
         pom_file = None
         packaging = "jar"
-        package_file = None
+        package_files = []
         groupId = None
         artifactId = None
         version = None
@@ -304,18 +328,18 @@ class Maven:
             for name in packaging_map:
                 if filename.endswith(packaging_map[name]):
                     packaging = name
-                    package_file = filename
+                    package_files.append(filename)
                     break
-        if groupId is None or artifactId is None or version is None or package_file is None or pom_file is None:
+        if groupId is None or artifactId is None or version is None or len(package_files) <= 0 or pom_file is None:
             logger.error("not a valid maven deploy directory with groupId={},artifactId={},version={},package_file={}"
                          ",pom_file={},packaging={}".format(groupId,
                                                             artifactId,
                                                             version,
-                                                            package_file,
+                                                            package_files,
                                                             pom_file,
                                                             packaging))
             return None, None, None, None, None, None, None, None
-        return groupId, artifactId, version, packaging, pom_file, package_file, source_file, java_doc_file
+        return groupId, artifactId, version, packaging, pom_file, package_files, source_file, java_doc_file
 
     @classmethod
     def _parse_pom(cls, pom_file):
@@ -346,7 +370,31 @@ class MavenLibMigrate:
 
     def _create_maven(self):
         to_config = self._config['to']
-        return Maven(to_config['url'])
+        return Maven(to_config['url'], to_config['repoId'])
+
+    def compare(self):
+        from_lib_browser = self._create_from_lib_browser()
+        to_lib_browser = self._create_to_lib_browser()
+
+        from_lib_versions = from_lib_browser.get_all_libraries()
+        to_lib_versions = to_lib_browser.get_all_libraries()
+        different_number = 0
+        missing_number = 0
+        for groupId in from_lib_versions.get_groups():
+            for artifactId in from_lib_versions.get_artifacts(groupId):
+                for version in from_lib_versions.get_versions(groupId, artifactId):
+                    from_lib_files = from_lib_browser.get_lib_files(version['url'])
+                    if to_lib_versions.exist_version(groupId, artifactId, version['version']):
+                        to_version_info = to_lib_versions.get_version(groupId, artifactId, version['version'])
+                        to_lib_files = to_lib_browser.get_lib_files(to_version_info['url'])
+                        if len(from_lib_files) != len(to_lib_files):
+                            logger.info("different library {}:{}:{}".format(groupId, artifactId, version['version']))
+                            different_number += 1
+                    else:
+                        logger.info("missing library {}:{}:{}".format(groupId, artifactId, version['version']))
+                        missing_number += 1
+        if different_number == 0 and missing_number == 0:
+            logger.info("totally same between the two repositories")
 
     def migrate(self):
         maven = self._create_maven()
@@ -406,22 +454,45 @@ def load_config(config_file):
         return json.load(fp)
 
 
-def parse_args():
-    parser = argparse.ArgumentParser(description="migrate archiva to jfrog")
-    parser.add_argument("--config", help="the configuration file", required=True)
-    parser.add_argument("--log-file", help="the log file name")
-    return parser.parse_args()
-
-
-def main():
-    args = parse_args()
-    init_logger(args.log_file)
+def migrate_lib(args):
     config = load_config(args.config)
     if isinstance(config, dict):
         MavenLibMigrate(config).migrate()
     elif isinstance(config, list):
         for item in config:
             MavenLibMigrate(item).migrate()
+
+
+def compare_lib(args):
+    config = load_config(args.config)
+    if isinstance(config, dict):
+        MavenLibMigrate(config).compare()
+    elif isinstance(config, list):
+        for item in config:
+            MavenLibMigrate(item).compare()
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="migrate archiva to jfrog")
+    subparsers = parser.add_subparsers(description="sub commands")
+
+    migrate_parser = subparsers.add_parser("migrate")
+    migrate_parser.add_argument("--config", help="the configuration file", required=True)
+    migrate_parser.add_argument("--log-file", help="the log file name")
+    migrate_parser.set_defaults(func=migrate_lib)
+
+    compare_parser = subparsers.add_parser("compare")
+    compare_parser.add_argument("--config", help="the configuration file", required=True)
+    compare_parser.add_argument("--log-file", help="the log file name")
+    compare_parser.set_defaults(func=compare_lib)
+
+    return parser.parse_args()
+
+
+def main():
+    args = parse_args()
+    init_logger(args.log_file)
+    args.func(args)
 
 
 if __name__ == "__main__":
