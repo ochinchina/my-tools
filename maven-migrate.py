@@ -1,7 +1,7 @@
 """
-migrate the maven libraries from one repository to another based on the maven plugin deploy:deploy-file
+Migrate the maven libraries from one repository to another based on the maven plugin deploy:deploy-file
 
-This script requires following python3 modules:
+Except for the tool maven and its plugin deploy:deploy-fule, this script requires following python3 modules:
 - requests
 - bs4
 - lxml
@@ -171,6 +171,9 @@ class MavenLibBrowser:
                 logger.error("fail to get maven libraries under {} with error {}".format(url, ex))
         return result
 
+    def get_url(self) -> str:
+        return self._url
+
     @classmethod
     def download_lib_files(cls, url):
         files = cls.get_lib_files(url)
@@ -268,6 +271,7 @@ class Maven:
 
         groupId, artifactId, version, packaging, pom_file, package_files, source_file, java_doc_file = self._create_deploy_params(
             files)
+        package_file = self._get_package_file(package_files, artifactId, version, packaging)
         if groupId is None:
             return
 
@@ -279,12 +283,12 @@ class Maven:
                    "-DartifactId={}".format(artifactId),
                    "-Dversion={}".format(version),
                    "-DpomFile={}".format(pom_file),
+                   "-Dfile={}".format(package_file),
                    "-Dpackaging={}".format(packaging)]
 
-        if len(package_files) == 1:
-            command.append("-Dfile={}".format(package_files[0]))
-        else:
-            command.append("-Dfiles={}".format(",".join(package_files)))
+        files, classifiers = self._get_package_with_classifiers(package_files, artifactId, version)
+        if len(files) > 0 and len(classifiers) > 0:
+            command.extend(["-Dfiles={}".format(files), "-Dclassifiers={}".format(classifiers)])
 
         command.extend(["--settings", "settings.xml"])
 
@@ -302,6 +306,27 @@ class Maven:
             logger.error("fail to run command {} with error:{}".format(" ".join(command), ex))
 
     @classmethod
+    def _get_package_file(cls, package_files, artifact_id, version, packaging):
+        for package_file in package_files:
+            if os.path.basename(package_file) == "{}-{}.{}".format(artifact_id, version, packaging):
+                return package_file
+        return None
+
+    @classmethod
+    def _get_package_with_classifiers(cls, package_files, artifact_id, version):
+        files = []
+        classifiers = []
+
+        for package_file in package_files:
+            base_name = os.path.basename(package_file)
+            packaging = base_name.split(".")[-1]
+            t = "{}-{}".format(artifact_id, version)
+            if base_name != "{}.{}".format(t, packaging) and base_name.startswith("{}-".format(t)):
+                classifiers.append(base_name[len(t) + 1:-1 * len(packaging) - 1])
+                files.append(package_file)
+        return ",".join(files), ",".join(classifiers)
+
+    @classmethod
     def _create_deploy_params(cls, files):
         java_doc_file = None
         source_file = None
@@ -317,19 +342,23 @@ class Maven:
             "zip": ".zip"
         }
 
+        pom_files = [item for item in files if item.endswith(".pom")]
+        if len(pom_files) == 1:
+            pom_file = pom_files[0]
+            groupId, artifactId, version = cls._parse_pom(pom_file)
+
         for filename in files:
-            if filename.endswith(".pom"):
-                pom_file = filename
-                groupId, artifactId, version = cls._parse_pom(filename)
-            elif filename.endswith("-sources.jar"):
+            if filename.endswith("-sources.jar"):
                 source_file = filename
             elif filename.endswith("-javadoc.jar"):
                 java_doc_file = filename
-            for name in packaging_map:
-                if filename.endswith(packaging_map[name]):
-                    packaging = name
-                    package_files.append(filename)
-                    break
+            else:
+                for name in packaging_map:
+                    if filename.endswith(packaging_map[name]):
+                        packaging = name
+                        package_files.append(filename)
+                        break
+
         if groupId is None or artifactId is None or version is None or len(package_files) <= 0 or pom_file is None:
             logger.error("not a valid maven deploy directory with groupId={},artifactId={},version={},package_file={}"
                          ",pom_file={},packaging={}".format(groupId,
@@ -339,6 +368,7 @@ class Maven:
                                                             pom_file,
                                                             packaging))
             return None, None, None, None, None, None, None, None
+
         return groupId, artifactId, version, packaging, pom_file, package_files, source_file, java_doc_file
 
     @classmethod
@@ -376,6 +406,9 @@ class MavenLibMigrate:
         from_lib_browser = self._create_from_lib_browser()
         to_lib_browser = self._create_to_lib_browser()
 
+        logger.info(
+            "start to compare the libs between {} and {}".format(from_lib_browser.get_url(), to_lib_browser.get_url()))
+
         from_lib_versions = from_lib_browser.get_all_libraries()
         to_lib_versions = to_lib_browser.get_all_libraries()
         different_number = 0
@@ -395,6 +428,8 @@ class MavenLibMigrate:
                         missing_number += 1
         if different_number == 0 and missing_number == 0:
             logger.info("totally same between the two repositories")
+
+        logger.info("finish to compare two repositories")
 
     def migrate(self):
         maven = self._create_maven()
@@ -418,6 +453,7 @@ class MavenLibMigrate:
                         if len(files) > 0:
                             maven.deploy(files)
                             shutil.rmtree(os.path.dirname(files[0]))
+        logger.info("finish to migrate all the libraries")
 
 
 def init_logger(log_file):
