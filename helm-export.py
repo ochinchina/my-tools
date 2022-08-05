@@ -14,7 +14,11 @@ the exported helm chart can be re-deployed with "helm install --name <name> <cha
 
 
 def export_manifest(release, outDir, namespace="default", revision=None):
-    command = ["helm", "get", "manifest", "-n", namespace, release]
+    command = ["helm", "get", "manifest"]
+    if namespace == "default":
+        command.append(release)
+    else:
+        command.extend(["--namespace", namespace, release])
     if revision is not None:
         command.extend(['--revision', revision])
     output = subprocess.check_output(command).decode()
@@ -66,7 +70,11 @@ def find_chart(fileName):
 
 
 def export_values(release, outDir, namespace, revision=None):
-    command = ["helm", "get", "values", "-n", namespace, release]
+    command = ["helm", "get", "values"]
+    if namespace == "default":
+        command.append(release)
+    else:
+        command.extend(["--namespace", namespace, release])
     if revision is not None:
         command.extend(['--revision', revision])
     output = subprocess.check_output(command)
@@ -86,18 +94,28 @@ def export_chart_yaml(release, outDir, namespace="default", revision=None):
 
 
 def get_app_version(release, namespace, revision):
-    output = subprocess.check_output(['helm', 'list', "-n", namespace, "-o", "json"]).decode()
+    output = subprocess.check_output(['helm', 'list', "--namespace", namespace, "--output", "json"]).decode()
     r = json.loads(output)
+    if isinstance(r, dict) and "Releases" in r:
+        r = r["Releases"]
     for item  in r:
-        if item['name'] == release:
-            return item['chart'].split('-')[-1], item['app_version']
+        app_name = item['Name'] if 'Name' in item else item['name']
+        app_revision = item['Revision'] if 'Revision' in item else item['revision']
+
+        if app_name == release and (revision is None or app_revision == revision):
+            chart_name = item['Chart'] if 'Chart' in item else item['chart']
+            app_version = item["AppVersion"] if "AppVersion" in item else item['app_version']
+            return chart_name.split('-')[-1], app_version
     return None
 
 
 def get_all_charts(namespace):
-    command = ['helm', 'list', "-n", namespace, "-o", "json"]
+    command = ['helm', 'list', "--namespace", namespace, "--output", "json"]
     output = subprocess.check_output(command).decode()
-    return json.loads(output)
+    r = json.loads(output)
+    if isinstance(r, dict) and "Releases" in r:
+        r = r["Releases"]
+    return [item['Name'] if 'Name' in item else item['name'] for item in r]
 
 
 def export_dep_chart_yaml(release, namespace, dep_chart, outDir, revision=None):
@@ -145,7 +163,7 @@ def parse_args():
 def main():
     args = parse_args()
     if args.release is None:
-        releases = [ item['name'] for item in get_all_charts(args.namespace) ]
+        releases = get_all_charts(args.namespace)
     else:
         releases = [args.release]
     for release in releases:
