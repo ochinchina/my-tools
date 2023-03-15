@@ -41,7 +41,8 @@ class TcpProxy:
         self.proxy_port = proxy_port
         self._debug = debug
     def connect_remote_proxy( self ):
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        addrinfo = socket.getaddrinfo( self.proxy_host, self.proxy_port )
+        s = socket.socket(addrinfo[0][0], socket.SOCK_STREAM)
         s.connect(( self.proxy_host, self.proxy_port))
         return s
 
